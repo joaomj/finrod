@@ -154,7 +154,9 @@ Interrupted MCP calls are not automatically replayed by the adapter.
 
 ### Voice
 
-The default provider is OpenRouter with `openai/whisper-large-v3`. Requests go to
+The implemented transcription defaults are OpenRouter and `openai/whisper-large-v3`,
+not requirements on which provider to use. With these defaults, startup requires
+`OPENROUTER_API_KEY` even if the selected chat provider is different. Requests go to
 `/audio/transcriptions` as base64 JSON with `provider.zdr=true`; there is no
 fallback that relaxes ZDR. The local OpenAI-compatible adapter uses multipart
 uploads to the same endpoint path and accepts an optional authentication key.
@@ -179,10 +181,14 @@ split and can exceed upstream processing limits.
 
 ## Configuration alternatives
 
+The configuration contract is implemented in [`src/config.ts`](../src/config.ts)
+and provider validation in [`src/runtime.ts`](../src/runtime.ts). Configure
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_USER_ID` for the private Telegram owner.
+The user ID must be a positive numeric ID, not a username.
+
 `FINROD_MODEL_PROVIDER` supports `openrouter`, `anthropic`, and `openai`.
 `FINROD_MODEL` must name a model in that provider's pinned Pi catalog. Direct
 Anthropic and OpenAI providers use `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`.
-The current user selected OpenRouter `anthropic/claude-haiku-5.5`.
 
 For local Whisper:
 

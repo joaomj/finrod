@@ -3,7 +3,8 @@
 ### A personal assistant, one Telegram conversation.
 
 Talk through an idea. Research a question. Save a topic and return to it later.
-Finrod combines Pi Durable with Telegram text and voice input, web research,
+Finrod combines [Pi Durable](https://github.com/earendil-works/pi/tree/main/packages/durable)
+with [Telegram](https://telegram.org/) text and voice input, web research,
 and knowledge you explicitly choose to keep.
 
 **[Quick start](#quick-start)** · **[Usage](#usage)** · **[Why Finrod?](#why-finrod)** · **[Documentation](#documentation)**
@@ -18,12 +19,24 @@ and knowledge you explicitly choose to keep.
 
 ### Requirements
 
-- Linux with Node.js 22.22.1 or a later Node 22 release, and npm.
-- A Telegram bot token from `@BotFather` and your numeric Telegram user ID.
-- An OpenRouter API key with access to your chosen chat and transcription models.
-- An Exa API key for authenticated web search. Keyless access is optional but uses
-  Exa's free shared limits.
-- systemd user services if you want Finrod to run outside your terminal.
+Finrod needs four components:
+
+- **Telegram:** a bot token from [@BotFather](https://t.me/BotFather) and your
+  numeric Telegram user ID.
+- **Pi Durable:** the conversation engine, installed with the project dependencies.
+- **An LLM provider supported by Pi:** the current Finrod configuration supports
+  OpenRouter, Anthropic, and OpenAI. Configure credentials for your chosen provider.
+- **A transcription service for voice input:** use OpenRouter or a local
+  OpenAI-compatible service, such as [Whisper](https://github.com/openai/whisper).
+  Text-only use does not call the transcription service.
+
+To run the current implementation, use Linux with [Node.js](https://nodejs.org/)
+22.22.1 or a later Node 22 release, and [npm](https://docs.npmjs.com/).
+
+**Optional:** an [Exa API key](https://exa.ai/docs/get-started/exa-mcp) for
+account-based web-search access; keyless access is supported. A
+[systemd](https://systemd.io/) user service provides automatic startup but is not
+needed for a foreground run.
 
 No public HTTP port is required. Keep the machine awake and online.
 
@@ -39,40 +52,22 @@ npm run build
 ### 2. Configure
 
 Create `~/.config/finrod/environment` with mode `0600`. Keep credentials outside
-Git. Replace the placeholder values below:
+Git. Follow the [configuration reference](docs/ARCHITECTURE.md#configuration-alternatives)
+to configure:
 
-```dotenv
-TELEGRAM_BOT_TOKEN=[REDACTED]
-TELEGRAM_USER_ID=replace-with-numeric-user-id
-OPENROUTER_API_KEY=[REDACTED]
-EXA_API_KEY=[REDACTED]
-FINROD_MODEL_PROVIDER=openrouter
-FINROD_MODEL=anthropic/claude-haiku-5.5
-TRANSCRIPTION_PROVIDER=openrouter
-TRANSCRIPTION_MODEL=openai/whisper-large-v3
-TRANSCRIPTION_LANGUAGE=pt
-```
+1. Your Telegram bot token and numeric user ID.
+2. Your chosen Pi model provider, model ID, and provider credentials.
+3. Your transcription service and any overrides it needs.
 
-`TRANSCRIPTION_LANGUAGE` defaults to `pt` (Portuguese), including Brazilian
-Portuguese. Use a two-letter language code such as `en` for English; `pt-BR`
-is not accepted by the transcription API. This setting guides speech recognition,
-not the language of the assistant's replies.
-
-Use the numeric user ID, not your Telegram username. This is the only user the
-bot accepts, and only private chats are supported.
-
-OpenRouter transcription requires zero data retention (ZDR) routing on every
-request. Enable account-wide ZDR in OpenRouter if you also require it for chat.
-Exa and Telegram have separate data policies. Authenticated Exa access uses your
-account's billing and rate limits; it is not unlimited.
+The current implementation requires `FINROD_MODEL_PROVIDER` and `FINROD_MODEL`;
+it does not choose a chat model automatically. Use values supported by the
+installed Pi version and your provider account. Optional settings can be omitted
+when their documented defaults suit your setup.
 
 Finrod does not automatically load a checkout `.env`. For foreground use, pass
-its path with `--env-file`. The service below reads only
+its path with `--env-file`. The user service reads only
 `~/.config/finrod/environment`. Changing your checkout `.env` after installation
 does not update the service configuration.
-
-For local Whisper or another chat provider, see
-[configuration alternatives](docs/ARCHITECTURE.md#configuration-alternatives).
 
 ### 3. Start
 
@@ -102,18 +97,30 @@ a saved topic does not delete conversation history or backups.
 
 ## Why Finrod?
 
-Finrod Felagund, from J. R. R. Tolkien's *The Silmarillion*, is known for his
-friendship with Men and his loyalty to Beren. He is a fitting namesake for an
-assistant meant to accompany a person, not take over their decisions.
+[Finrod Felagund](https://tolkiengateway.net/wiki/Finrod) was a king of the Noldor,
+founder of the hidden realm of Nargothrond, and one of the Elven leaders who
+stood against Morgoth in J. R. R. Tolkien's
+*[The Silmarillion](https://en.wikipedia.org/wiki/The_Silmarillion)*. But his
+strength was not only that of a ruler or warrior. He was also a seeker of
+understanding across the boundaries of his own people.
 
-The name expresses three goals:
+When Finrod encountered the first Men to enter Beleriand, he stayed among them,
+learned their language, and shared his knowledge. His conversations with the
+mortal woman Andreth explored the differences between Elves and Men: mortality,
+loss, and hope. He did not merely have answers to give; he took another people's
+experience seriously enough to listen and question.
 
-- **Thoughtful conversation.** Help explore ideas and ask when something is unclear.
-- **Continuity.** Keep the conversation and return to the topics that matter.
-- **Respect for your agency.** Save knowledge on request and keep external sources read-only.
+His loyalty also had a cost. Bound by his promise to Barahir, Finrod aided
+Barahir's son Beren even when his own people would not follow him. Captured by
+Sauron, he ultimately broke his bonds and killed the werewolf sent to devour
+Beren, receiving mortal wounds himself. His story joins wisdom and power to
+responsibility: a promise mattered more than the safety of his throne.
 
-These are design goals, not a claim that the assistant is infallible. Feedback
-helps identify where its behavior falls short.
+That is the spirit behind this name. Finrod should be a capable companion in
+thought: bringing knowledge to a conversation without replacing the person at
+its center, helping ideas survive beyond a single exchange, and treating trust
+as a responsibility rather than a claim of authority. The literary namesake
+sets an aspiration—not a claim that software possesses his wisdom or virtue.
 
 ## Documentation
 
