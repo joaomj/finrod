@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Finrod dependencies, credentials, and runtime state
+node_modules/
+.env.*
+*.sqlite
+*.sqlite-*
+.finrod/
