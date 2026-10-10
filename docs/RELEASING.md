@@ -28,8 +28,9 @@ installer. Neither proves deployment correctness or replaces threat modeling.
 
 Actions are pinned to commit hashes. Workflow permissions are read-only by
 default; CodeQL can upload security results, and only the gated publication job
-can write a release. Checkout does not persist Git credentials. Dependabot
-proposes weekly npm and Action updates; it does not automatically merge them.
+can write a release. Checkout does not persist Git credentials. Automatic
+dependency-update branches and pull requests are disabled. Dependency changes
+require explicit approval; security scanning remains enabled.
 
 ## Publish a version
 
