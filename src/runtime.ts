@@ -9,6 +9,7 @@ import { AssistantEntry, createRegistry, Harness } from "@earendil-works/pi-dura
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { createMcpExtension } from "pi-mcp-client/durable";
 import { describeError } from "./errors.js";
+import type { AssistantReply } from "./reply.js";
 import type { Config } from "./config.js";
 import { knowledgeExtension } from "./extensions/knowledge.js";
 import { persona } from "./extensions/persona.js";
@@ -38,7 +39,7 @@ export async function openAssistant(config: Config) {
     config: {
       exa: {
         url: "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa",
-        headers: { "x-api-key": config.exa.apiKey },
+        ...(config.exa.apiKey ? { headers: { "x-api-key": config.exa.apiKey } } : {}),
         exposure: "hidden",
         toolExposure: { web_search_exa: "direct", web_fetch_exa: "direct" },
         timeoutMs: 30_000,
@@ -61,7 +62,7 @@ export async function openAssistant(config: Config) {
     harness.resume();
     const opened = harness;
     return {
-      async answer(input: string, requestId: string): Promise<string> {
+      async answer(input: string, requestId: string): Promise<AssistantReply> {
         const submission = await root.submit({ type: "input", content: input, requestId }, context);
         const result = await submission.wait(context);
         if (result.status !== "done") {
@@ -73,7 +74,15 @@ export async function openAssistant(config: Config) {
           ? message.content.flatMap(block => block.type === "text" ? [block.text] : [])
           : []).join("\n");
         if (!text?.trim()) throw new Error(`Assistant request ${requestId}: no text answer was stored.`);
-        return text;
+        const message = entry?.model?.find(message => message.role === "assistant");
+        if (!message || message.role !== "assistant") throw new Error(`Assistant request ${requestId}: no model metadata.`);
+        return {
+          text,
+          metadata: {
+            requestId, conversationId: root.id, submissionId: submission.id,
+            answerEntryId: result.answer, provider: message.provider, model: message.model,
+          },
+        };
       },
       async close(): Promise<void> {
         try { await opened.close(context); } finally { await mcp.close(); }

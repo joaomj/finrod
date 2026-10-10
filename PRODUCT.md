@@ -8,13 +8,32 @@ tangents for later, and connect ideas across conversations.
 
 This document records research findings, agreed technical choices, and an
 architecture proposal. It is not a product requirements document (PRD).
-Interaction details, acceptance criteria, deployment, and implementation scope
-remain to be defined. No Finrod application has been implemented.
+The initial v0 scope is approved and a first implementation is present.
+Local integration tests pass. The user has started the local service and observed
+Telegram text replies; voice, feedback, and live recovery still need verification.
+See [README.md](README.md) for the current implementation and operating limits.
 
 Conversation history and personal knowledge serve different purposes. History
 preserves what was said. Personal knowledge records useful facts, preferences,
 decisions, open questions, and connections. The user should be able to inspect,
 correct, and delete stored knowledge.
+
+## Approved v0 scope
+
+- One owner-only private Telegram conversation, with text and voice input.
+- Exa search and fetch, plus explicitly saved Markdown topic summaries.
+- Park and resume topics through summaries in the current conversation.
+- Defer QMD, automatic memory extraction, voice output, and background agents.
+- Default transcription to OpenRouter `openai/whisper-large-v3`, with mandatory
+  ZDR routing. Permit a configured local OpenAI-compatible transcription server.
+- Run locally first, with configuration and persistent data separate from code
+  so the same service can move to an always-on VPS.
+- Keep the core small. Reuse Pi Durable extensions rather than create another
+  plugin framework.
+- Add owner-only thumbs-up and thumbs-down buttons to new model-generated
+  Telegram replies. Store the latest vote, timestamps, reply references, and
+  model identity locally. Do not send votes to the model or change behavior
+  automatically. Export metadata for later review without message content.
 
 ## Agreed direction
 
@@ -94,7 +113,8 @@ storage layout remains an implementation decision.
 
 **grammY** is a TypeScript library for Telegram bots. It handles Telegram API
 calls, messages, file retrieval, and replies. It is not an AI runtime or a memory
-system. Its use is a recommendation, not an implemented integration. [S5]
+system. The initial Finrod Telegram adapter now uses grammY. Its live connection remains
+unverified. [S5]
 
 ### A small knowledge layer
 
@@ -219,7 +239,7 @@ A corrected temporary launcher allowed the exported server to work through the
 Durable adapter. A live call also confirmed the raw-source overwrite problem.
 The decision is to abandon the package, not maintain a hardened fork.
 
-## Verification performed
+## Verification performed during initial research
 
 The following packages were installed in an isolated temporary directory with
 installation scripts disabled:
@@ -245,9 +265,32 @@ The research included source inspection of the Telegram and mobile projects.
 Those applications were not run. No real Telegram bot, QMD process, transcription
 provider, paid model call, or end-to-end restart scenario was exercised.
 
-## Open decisions and next validation
+## Implementation verification
 
-Before implementation scope becomes a PRD:
+Three local integration tests exercise Telegram authorization and replay,
+uncertain delivery after reopen, saved-topic operations through Durable, and
+per-message feedback across restart. The feedback test includes changed and
+repeated votes, foreign-click rejection, reply metadata, and read-only export.
+The tests use a local HTTP server, Pi's scripted provider, real SQLite files,
+and real Markdown pages. They do not establish external connectivity or model
+quality.
+
+The user has reported a running local systemd service and provided a Telegram
+screenshot with model replies, source links, and a saved-topic acknowledgement.
+This establishes live text replies, not independent verification of the cited
+facts or saved page. The screenshot also shows a date-handling limitation:
+Finrod has no clock tool and relied on web pages for the current date.
+
+Live voice transcription, feedback interaction, restart continuity, backup
+restore, and VPS migration remain to be checked. The user selected
+`anthropic/claude-haiku-5.5` through OpenRouter for chat and reports account-wide
+OpenRouter ZDR enabled.
+
+## Original open questions and validation
+
+The approved v0 scope resolves the initial scope questions above. The original
+research questions remain below for reference; provider connectivity, backup
+restore, and deployment validation still need live checks:
 
 1. Define how Telegram selects, parks, resumes, and links discussions.
 2. Define when knowledge is saved and how correction and deletion work.
@@ -261,9 +304,7 @@ Before implementation scope becomes a PRD:
    and uncertain outgoing delivery before relying on the service.
 
 The proposed implementation sequence is a narrow Telegram-to-Durable service
-with Exa, followed by voice input and saved-topic knowledge/retrieval. This is
-an ordering proposal, not authorization to implement or a set of acceptance
-criteria.
+with Exa, followed by voice input and saved-topic knowledge/retrieval. The user subsequently approved the v0 scope recorded above.
 
 ## Sources
 

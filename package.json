@@ -10,7 +10,8 @@
     "build": "tsc",
     "check": "tsc --noEmit",
     "test:telegram": "npm run build && node --test test/telegram.test.mjs",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "feedback:export": "node dist/feedback-export.js"
   },
   "dependencies": {
     "@earendil-works/chord": "1.1.0",

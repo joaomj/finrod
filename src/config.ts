@@ -26,10 +26,10 @@ export function loadConfig(env: Environment = process.env) {
     return url.href.replace(/\/$/, "");
   };
 
-  const owner = required("TELEGRAM_OWNER_ID");
+  const owner = required("TELEGRAM_USER_ID");
   const ownerId = Number(owner);
   if (!/^[1-9]\d*$/.test(owner) || !Number.isSafeInteger(ownerId)) {
-    throw new Error("TELEGRAM_OWNER_ID: set your positive numeric Telegram user ID.");
+    throw new Error("TELEGRAM_USER_ID: set your positive numeric Telegram user ID.");
   }
   const dataDir = env.FINROD_DATA_DIR ?? join(homedir(), ".local", "share", "finrod");
   if (!isAbsolute(dataDir)) {
@@ -47,7 +47,7 @@ export function loadConfig(env: Environment = process.env) {
     dataDir,
     telegram: { token: required("TELEGRAM_BOT_TOKEN"), ownerId },
     model: { provider: required("FINROD_MODEL_PROVIDER"), modelId: required("FINROD_MODEL") },
-    exa: { apiKey: required("EXA_API_KEY") },
+    exa: { apiKey: env.EXA_API_KEY?.trim() || undefined },
     transcription: {
       provider: transcriptionProvider,
       baseUrl: transcriptionBaseUrl,

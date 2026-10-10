@@ -1,0 +1,23 @@
+[Unit]
+Description=Finrod personal Telegram assistant
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=@PROJECT@
+EnvironmentFile=%h/.config/finrod/environment
+ExecStart=@NODE@ @PROJECT@/dist/main.js
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=180
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h/.local/share/finrod
+
+[Install]
+WantedBy=default.target
