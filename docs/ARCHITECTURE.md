@@ -1,5 +1,8 @@
 # Architecture
 
+This document describes the v0.1.0 single-user architecture. The proposed
+multi-user design is separate in [Roadmap](ROADMAP.md).
+
 Finrod is a single-host personal assistant. Telegram provides the interface;
 Pi Durable owns conversation execution. The core stays small by using Pi's
 provider collection, extension registry, tools, and recovery machinery.
@@ -260,6 +263,8 @@ settings, not model-accessible files or prompt content.
 - OpenRouter account-wide ZDR can cover chat; the application additionally
   requires it per transcription request. The user reports account-wide ZDR enabled.
 - ZDR does not cover Telegram, Exa, local databases, logs, or backups.
+- v0.1.0 does not encrypt stored conversations or topics at the application layer.
+  File permissions restrict ordinary OS access, not a privileged administrator.
 - The systemd template restricts writes to the data directory and private temporary
   storage. It runs as the user, not root, with `NoNewPrivileges` and private files.
 - Known secret environment values are redacted from application error messages.

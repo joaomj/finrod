@@ -1,6 +1,9 @@
 # Product requirements: Finrod v0
 
-**Status:** agreed v0 scope; implemented locally with live validation in progress.
+**Status:** v0.1.0 records the single-user architecture validated on the VPS. Core
+conversation, voice, feedback, and migration paths are verified live.
+[Roadmap](ROADMAP.md) defines the separate multi-user v1 target; it does not
+change this release's one-owner boundary.
 This is the product requirements document (PRD). It consolidates the existing
 scope rather than introducing new capabilities or a second product plan.
 
@@ -37,13 +40,13 @@ observations and limitations belong in [Validation](VALIDATION.md).
 | User outcome | Acceptance criterion | Current evidence |
 | --- | --- | --- |
 | Private access | Only the configured owner can use the bot, in a private chat | Owner flow works live; unauthorized and group rejection covered locally |
-| Conversation continuity | Earlier messages remain usable after service and computer restarts | Verified live: a post-reboot summary referenced pre-reboot discussion |
-| Voice conversation | A voice note yields a stored transcript and delivered text answer | Verified live in Portuguese; interrupted downloads covered locally |
+| Conversation continuity | Earlier messages remain usable after service and computer restarts | Verified live across local restarts and migration to the VPS |
+| Voice conversation | A voice note yields a stored transcript and delivered text answer | Verified live locally and with a fresh voice note on the VPS; interrupted downloads covered locally |
 | Web research | The assistant can search and cite sources through the restricted integration | Successful Exa search results and delivered citations inspected; factual quality still needs judgment |
 | Explicit topic memory | On request, list, save, resume, correct, link, and delete named topics | List/save/read tools succeeded live; save/resume interaction verified; correction/deletion covered locally |
-| Feedback for review | The owner can rate a reply and change the vote; metadata persists without automatically altering behavior | Positive vote verified live; changes, replay, and persistence covered locally |
+| Feedback for review | The owner can rate a reply and change the vote; metadata persists without automatically altering behavior | New positive votes verified locally and on the VPS; changes and replay covered locally |
 | Visible delivery outcome | Avoid duplicate submissions and do not automatically resend uncertain replies | Local replay and uncertain-delivery checks pass; live failure notice observed |
-| Portable operation | Preserve conversation, topics, and operational state through backup restore and single-instance migration | Procedures exist; restore and VPS migration remain unverified |
+| Portable operation | Preserve conversation, topics, and operational state through backup restore and single-instance migration | Stopped-service archive restored with integrity/count checks; only the VPS remains enabled; earlier conversation recalled after migration |
 
 The implementation permits a configured chat provider and a separate
 transcription service. OpenRouter transcription requires zero data retention
@@ -77,26 +80,20 @@ and the known context/ambiguity problems have an evidence-based diagnosis and
 an agreed resolution. Ordinary conversation continuity is already verified;
 it is not a prerequisite to repeat.
 
-### 2. Establish recoverability
+### 2. Close the remaining operational checks
 
-Restore a stopped-service backup into an isolated directory and verify the
-conversation, saved topics, and Telegram state without launching a second bot.
-Separately check recovery of an interrupted turn under controlled conditions.
-A successful restart between completed turns does not establish crash recovery.
+Stopped-service backup restore and migration are complete. Exercise recovery of
+an interrupted turn under controlled conditions; completed-turn continuity does
+not establish that behavior. Observe automatic startup at the next planned VPS
+reboot. Keep current VPS backups: the retained laptop copy no longer contains
+new messages.
 
-**Done when:** restore preserves the expected state, and the interruption check
-records whether work resumes, fails explicitly, or leaves delivery uncertain.
-Do not infer success from process startup alone.
+**Done when:** the interruption check records whether work resumes, fails
+explicitly, or leaves delivery uncertain, and post-reboot startup is observed.
+Use the [operations procedure](OPERATIONS.md#backup-and-vps-migration) for future
+backups and moves rather than repeating the completed migration as a prerequisite.
 
-### 3. Move the validated single instance to Contabo
-
-Use the [operations procedure](OPERATIONS.md#backup-and-vps-migration). Stop the
-local instance before starting the VPS instance. Verify text, voice, topic
-resumption, feedback, and service startup on the new host.
-
-**Done when:** only the VPS instance is active and its acceptance checks pass.
-
-### 4. Improve from daily use
+### 3. Improve from daily use
 
 Review explicit feedback and answer quality before expanding scope. Prioritize
 changes that improve conversation and saved-topic usefulness. New capabilities
@@ -105,8 +102,10 @@ require a product decision; adding infrastructure is not itself a success metric
 ## Deferred
 
 QMD indexing, automatic memory extraction, autonomous ingestion, background
-agents, automatic feedback-driven changes, voice output, groups, multiple users,
+agents, automatic feedback-driven changes, voice output, groups,
 a visual discussion graph, and a feedback dashboard remain outside v0.
+Multiple users also remain outside v0; shared-bot support for hundreds of users
+is now the planned v1 direction in [Roadmap](ROADMAP.md).
 
 ## Document ownership
 
@@ -114,6 +113,7 @@ a visual discussion graph, and a feedback dashboard remain outside v0.
 - [Architecture](ARCHITECTURE.md): implementation, diagrams, and configuration.
 - [Operations](OPERATIONS.md): service management, retention, backup, and migration.
 - [Validation](VALIDATION.md): dated evidence, checks, and remaining uncertainty.
+- [Roadmap](ROADMAP.md): multi-user v1 design, privacy decisions, and release gates.
 
 This PRD owns user outcomes, scope, boundaries, and priorities. The earlier
 research proposal remains in Git history rather than a duplicate active document.

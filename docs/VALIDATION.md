@@ -1,125 +1,106 @@
 # Validation
 
 This record separates live observations from local test coverage. Successful
-transport does not establish model accuracy, source quality, or disaster recovery.
-No private message content, credentials, or Telegram identifiers are included.
+transport does not establish model accuracy, source quality, or recovery of an
+interrupted turn. No credentials or private message content are included.
 
 ## Live checks: 2026-10-10
 
-The deployment checked on this date used OpenRouter `anthropic/claude-haiku-5.5` for conversation
-and `openai/whisper-large-v3` for transcription, with `TRANSCRIPTION_LANGUAGE=pt`.
-The user reports account-wide OpenRouter ZDR enabled. The application additionally
-requires ZDR on each transcription request.
+Finrod moved from the local computer to a Contabo VPS. The checked deployment
+used OpenRouter for conversation and Whisper transcription, with the Portuguese
+language hint. The user reports account-wide OpenRouter zero data retention
+(ZDR) enabled; each transcription request also requires ZDR in application code.
 
 | Area | Evidence | Limit |
 | --- | --- | --- |
-| Text conversation | User observed replies through Telegram | Does not establish model accuracy |
-| Web research | Persisted Exa search tool results reported success, and delivered replies included citations | Cited facts and page content were not independently audited |
-| Conversation continuity | A post-reboot summary recalled discussion from before the reboot in the same Durable conversation | Does not prove recovery of an interrupted turn |
-| Saved topics | Persisted list/save/read tool results reported success; delivered messages showed saving and resuming the topic | Correction, linking, and deletion remain to be confirmed live |
-| Feedback | A positive vote was read from SQLite with reply, Durable, and model references | Changing a vote is covered locally, not yet confirmed live |
-| Voice | Persisted Portuguese transcript, completed input, and sent answer were inspected after the fix | Local Whisper and other language overrides remain unverified live |
-| Service startup | Logs show startup after boot and after a controlled restart | Does not prove recovery of a turn interrupted by a crash |
+| Text conversation | New requests completed and replies were sent on the VPS | Does not establish model accuracy |
+| Web research | Successful Exa search tool results and delivered citations were inspected before migration | Cited facts were not independently audited |
+| Conversation continuity | Post-reboot and post-migration summaries recalled earlier discussion from the same Durable conversation | Does not prove recovery of an interrupted turn |
+| Saved topics | List/save/read tools succeeded locally; saved-topic files were restored on the VPS | Correction, linking, deletion, and a fresh saved-topic read on the VPS remain to be confirmed live |
+| Feedback | A new positive vote on a VPS-generated reply was stored with its metadata | Changing a vote is covered locally, not yet confirmed live |
+| Voice | A fresh post-migration voice note produced a nonempty stored transcript and a delivered answer | Local Whisper and other language overrides remain unverified live |
+| Delivery state | `/status` reported no uncertain replies; inspected new requests completed and replies were marked sent | Not a guarantee of exactly-once delivery under network failure |
+| Single active instance | VPS service was active and enabled; local service was inactive and disabled | Another manually launched instance is not prevented across hosts |
 
-### Evidence for continuity across restarts
+### Backup restore and migration
 
-Stored message timestamps and service logs establish this sequence on the
-validation date, in local time (UTC−03):
+The user-run migration stopped and disabled the local service before making a
+full state archive. It transferred the archive and private configuration over
+SSH and restored them into the empty VPS data directory. The migration reported
+a matching archive digest, successful SQLite integrity checks, and matching
+record and topic counts before starting the VPS service.
 
-1. At 03:04–03:06, the user discussed the date, saved a topic, and resumed it.
-2. The computer rebooted multiple times afterward; the latest boot started
-   Finrod at 15:29.
-3. At 16:18, the user requested a summary of previous discussion. The delivered
-   summary recalled the earlier date discussion and saved-topic interaction,
-   alongside a newer discussion. All entries belong to the same Durable conversation.
+Independent post-migration inspection confirmed successful startup and new
+text, feedback, and voice activity. A summary on the VPS referenced conversation
+from the local computer, including its earlier voice discussion. This verifies
+a stopped-service backup restore and continuity across the host migration.
+The original local data and private migration backup were retained, not deleted.
 
-This verifies that completed conversation context survives computer and service
-restarts. The earlier classification as unverified was incorrect. The summary's
-qualification about other conversations did not imply loss of pre-restart history.
-Topic save/read tool results also establish more than a user-reported summary:
-the saved-topic interaction actually ran successfully.
+User lingering is enabled on the VPS. At inspection, the service had zero
+restarts and no application errors in the checked log excerpt. Startup following
+an actual VPS reboot has not yet been exercised; configuration alone does not
+establish that result.
 
-### Audio failure and repair
+### Installer on the VPS
 
-The first voice attempt failed while downloading audio from Telegram, before
-transcription. Logs showed a connection timeout. Subsequent unauthenticated
-network checks reached Telegram successfully, consistent with a transient failure.
+The actual Bash installer ran as the dedicated non-root service account on
+Ubuntu 26.04 x86_64. It installed Node `v22.23.3` in the account's private runtime
+directory alongside the existing system Node `v24.13.0`. It installed locked
+application dependencies, built the application, verified the systemd unit, and
+started the real user service with migrated configuration.
 
-The downloader now retries recognized transient failures up to three attempts.
-A local regression test also exposed truncated-response handling, which was
-corrected. Typecheck, build, both Telegram tests, and the voice-download test
-passed before the service restarted. A resent voice note then produced a stored
-transcript and a delivered answer without a new error in the inspected logs.
+This validates automatic Node installation and actual service startup, beyond
+the isolated smoke test. OS prerequisites were already present, so privileged
+package installation remains untested. The arm64 bootstrap path was not exercised.
 
-This confirms the live audio path, not that live retry behavior was exercised:
-the resent message did not show a retry in the inspected logs.
+### Audio repair and answer quality
 
-### Observed answer-quality limits
+The initial local voice attempt timed out while downloading from Telegram,
+before transcription. The bounded-retry repair passed its regression test, and
+subsequent voice requests completed locally and on the VPS. The live requests
+did not show retries, so retry behavior is established by the local test rather
+than inferred from successful transcription.
 
-- An earlier date answer relied on web pages rather than reliable current-date
-  and timezone context. Inspect the existing Pi integration before adding tools.
-- A spoken proper name was ambiguous in transcription, and the answer selected
-  one interpretation without clarification. A Portuguese hint does not guarantee
-  accurate names or remove ambiguity.
+Known answer-quality concerns remain: an earlier date answer relied on web
+pages instead of reliable current-date and timezone context, and an ambiguous
+spoken name was interpreted without clarification. Inspect the existing Pi
+integration before proposing additional tools. Language hints do not guarantee
+correct names, source claims, or interpretations.
 
 ## Automated checks
 
-Run the focused check for the changed area from the checkout:
+Run the focused check for the changed area from the project folder:
 
 | Command | Coverage |
 | --- | --- |
 | `npm run check` | TypeScript types across the application |
-| `npm run test:install` | First-install prompts, real dependency installation/build, unit verification, and configuration/data preservation on rerun |
+| `npm run test:install` | First-install prompts, real dependency installation/build, unit verification, and preservation on rerun |
 | `npm run test:telegram` | Owner-only intake, replay deduplication, uncertain delivery after reopen, and per-message feedback |
-| `npm run test:voice` | Interrupted audio download, clean retry, bounded exhaustion, and preservation of the final error |
+| `npm run test:voice` | Interrupted download, clean retry, bounded exhaustion, and preservation of the final error |
 | `npm run build && node --test test/knowledge.test.mjs` | Topic save, correction, reopen, request deduplication, path restrictions, and deletion |
 
-Telegram and voice tests use a local HTTP server. Persistence checks use real
-SQLite and Markdown files. The knowledge test uses Pi's scripted provider, not
-a paid model. The four integration tests do not measure answer quality or prove
-provider availability. The knowledge check passed during initial implementation;
-it was not rerun for the voice-download-only repair.
+Application integration checks use local HTTP endpoints, real SQLite, and
+Markdown files. The knowledge test uses Pi's scripted provider, not a paid model.
+It passed during initial implementation and was not rerun for the voice-only
+repair. The voice and Telegram checks passed after that repair.
 
-### Installer smoke test
+The installer smoke test passed with a temporary project copy, home, runtime
+directory, and fake credentials. Real installation, compilation, catalog
+validation, and unit verification ran twice; only service control was substituted.
+Rerunning preserved edited configuration, `0600` permissions, a saved topic, and
+the service unit. Test credentials were absent from terminal output and logs.
+This test requires a non-root Linux user, Python 3, compatible Node/npm, systemd
+verification tools, and npm registry access. Syntax and ShellCheck checks passed.
 
-The installer test passed using a temporary checkout, home directory, runtime
-directory, and fake credentials. It exercised real `npm ci`, compilation, model
-catalog validation, and `systemd-analyze` verification on both first installation
-and rerun. The rerun preserved an owner-edited environment file, its `0600`
-permissions, a saved topic, and the generated service unit. Captured terminal
-output and installer logs did not contain the test credentials.
+## Remaining checks
 
-Only service control is substituted: no real bot or user service is started or
-stopped. The test requires Python 3, a compatible Node/npm installation, systemd
-verification tools, and access to the public npm registry. It runs as a non-root
-Linux user and can take longer than the application integration checks.
+- Confirm the remaining topic operations and a changed feedback vote live.
+- Inspect cited pages and diagnose the known context and ambiguity problems.
+- Exercise controlled interrupted-turn recovery, separately from completed-turn continuity.
+- Observe service startup after the next planned VPS reboot.
+- Validate alternative transcription providers or installer platforms when selected.
 
-This verifies the path with prerequisites already installed. Automatic Node
-download, privileged OS-package installation, and first startup on a fresh host
-remain unverified. Syntax and ShellCheck checks also pass; they do not replace
-those deployment checks.
-
-## Repeatable smoke checks
-
-These checks can be repeated after deployment changes. They are not all
-outstanding work; the evidence above records those already completed.
-
-1. Send `/start`, then a normal text message.
-2. Request web research and inspect the cited pages.
-3. Send a short voice note and compare the answer with what you said.
-4. Save a named topic, list it, correct it, and resume it.
-5. Rate a reply, change the vote, and inspect `npm run --silent feedback:export`.
-6. Restart while idle. Continue the conversation and resume the saved topic.
-7. Check `/status` for uncertain deliveries.
-
-## Remaining operational validation
-
-- Confirm topic correction, related-topic links, deletion, and changed feedback live.
-- Check recovery of an interrupted turn separately from verified conversation continuity.
-- Verify backup restore in an isolated directory without starting a second bot.
-- Migrate to Contabo only after stopping the source instance; verify it again there.
-- Confirm local OpenAI-compatible transcription if that provider is selected.
-
-See [the PRD](PRD.md#next-steps-in-order) for priorities.
-Follow the [operations guide](OPERATIONS.md) for backup and migration. Never run
-two instances for the same Telegram bot.
+Repeat text, voice, saved-topic, feedback, and `/status` checks after deployment
+changes. Completed migration and ordinary continuity are not outstanding work.
+See [the PRD](PRD.md#next-steps-in-order) for priorities and
+[Operations](OPERATIONS.md) for backup and service procedures.

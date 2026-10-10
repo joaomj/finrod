@@ -3,6 +3,40 @@
 Use this guide after completing the [setup](../README.md). Commands assume the
 default data directory and a systemd user service.
 
+## Current deployment
+
+The active instance runs on Contabo under the non-root `finrod` account. The
+local computer's service is stopped and disabled. Its retained data is a
+pre-migration snapshot, not a current replica. Do not restart it for the same bot.
+
+| Item | Location or setting |
+| --- | --- |
+| Application | `/users/root/projects/finrod` |
+| Service owner | `finrod` |
+| Configuration | `/home/finrod/.config/finrod/environment` |
+| Data | `/home/finrod/.local/share/finrod` |
+| Managed Node | `/home/finrod/.local/share/finrod-runtime/node/bin/node` |
+| Service | `finrod.service`, enabled under the owner's user manager |
+| Startup without login | User lingering enabled |
+
+Service, backup, and export commands below must run as the service owner.
+Running `systemctl --user` as root addresses root's manager, not Finrod's.
+From a root shell on the VPS, enter a maintenance shell with the correct user,
+runtime, and Node path:
+
+```sh
+uid=$(id -u finrod)
+runuser -u finrod -- env HOME=/home/finrod \
+  XDG_RUNTIME_DIR="/run/user/$uid" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+  PATH=/home/finrod/.local/share/finrod-runtime/node/bin:/usr/local/bin:/usr/bin:/bin \
+  bash
+```
+
+Inside that shell, change to `/users/root/projects/finrod` for build, installer,
+or feedback-export commands. Keep the service running during read-only inspection.
+See [Validation](VALIDATION.md) for deployment evidence and remaining checks.
+
 ## Installation
 
 Run `bash scripts/install.sh` from the checkout as a non-root user. The script
@@ -97,8 +131,7 @@ journalctl --user -u finrod.service -n 40 --no-pager
 Do not start a foreground instance while the service is running. Changing the
 credential file does not change an existing process; restart the service after
 editing it. After building a new application revision, restart the service to
-load it. Startup adds missing feedback tables without replacing existing inbox,
-outbox, or conversation records.
+load it. Documentation-only updates do not require a restart.
 
 The service finishes its current operation before shutdown. The service template
 allows three minutes, then terminates the process. On reopen, Durable resumes
@@ -130,8 +163,7 @@ cannot overwrite newer votes. Feedback processing shares the single Telegram
 worker with conversation turns, so a click can wait while an answer is running.
 If Telegram's confirmation window expires, a recorded vote still remains saved.
 
-After the updated service has initialized its tables, export metadata as JSON
-Lines from the checkout:
+Export feedback metadata as JSON Lines from the project folder:
 
 ```sh
 npm run --silent feedback:export
@@ -185,16 +217,24 @@ recent replies before asking Finrod to repeat a request.
 
 For migration to the VPS:
 
-1. Install the same Node release and application revision under a dedicated user.
-2. Install locked dependencies and build on the VPS.
-3. Stop Finrod on the source machine and copy its complete data directory.
-4. Transfer the credential file securely, with mode `0600`.
-5. Install the user service with the VPS paths and enable lingering.
-6. Start only the VPS instance. Check text, voice, saved topics, and `/status`.
+1. Prepare a dedicated non-root account, the same application revision, and a
+   supported Node runtime on the destination. Do not start its bot yet.
+2. Stop and disable the source service so a source reboot cannot create a duplicate.
+3. Back up its complete data directory while stopped, and copy the archive over SSH.
+4. Restore into an empty destination directory. Verify the archive digest,
+   SQLite integrity, and expected records and topics before startup.
+5. Transfer credentials separately with mode `0600`; adjust host-specific paths.
+6. Run the installer as the destination account and enable lingering if needed.
+7. Confirm only the destination is active. Check text, earlier context, voice,
+   saved topics, feedback, and `/status`.
 
 Never run two instances for the same bot, even with different data directories.
 The process lock protects one directory on one machine, not multiple hosts.
-Backup restore and VPS migration have not yet been exercised end to end.
+The local-to-VPS migration exercised this stopped-service restore procedure.
+Keep making backups on the active VPS; the original local copy does not update.
+If a move fails after the destination starts, stop it before considering rollback.
+Preserve and reconcile any newer destination state before starting an older source
+copy. Starting the source blindly can lose acknowledged work or create duplicates.
 
 ## Failure and privacy boundaries
 
@@ -221,7 +261,6 @@ Backup restore and VPS migration have not yet been exercised end to end.
   The Telegram ledger uses `synchronous=FULL`. Backups remain necessary.
 - Shutdown finishes the current operation before exiting. systemd allows three
   minutes, then terminates the process; committed work remains available for recovery.
-
 
 ## Acceptance checks
 

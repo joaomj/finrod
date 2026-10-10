@@ -9,9 +9,12 @@ and knowledge you explicitly choose to keep.
 
 **[Quick start](#quick-start)** · **[Usage](#usage)** · **[Why Finrod?](#why-finrod)** · **[Documentation](#documentation)**
 
-> **v0 status:** live text, Portuguese voice transcription, feedback storage,
-> saved-topic save/resume, and conversation continuity across restarts work. Backup restore and VPS migration remain
-> unverified. See the [validation record](docs/VALIDATION.md) for evidence and limits.
+> **v0.1.0:** one authorized user per bot instance, running on a VPS. Text, voice, feedback, and conversation
+> continuity after migration are verified. Saved topics and a stopped-service
+> backup were preserved. See [Validation](docs/VALIDATION.md) for evidence and
+> the remaining checks. [The v1 roadmap](docs/ROADMAP.md) targets one shared bot
+> for hundreds of users; multi-user isolation and encrypted storage are not
+> implemented in this release.
 
 ---
 
@@ -19,7 +22,7 @@ and knowledge you explicitly choose to keep.
 
 ### Requirements
 
-Finrod needs four components:
+This release serves one Telegram user per instance. Finrod needs four components:
 
 - **Telegram:** a bot token from [@BotFather](https://t.me/BotFather) and your
   numeric Telegram user ID.
@@ -38,7 +41,7 @@ On Linux, run as your normal user from an interactive terminal:
 git clone https://github.com/joaomj/finrod.git && bash finrod/scripts/install.sh
 ```
 
-Already have the checkout? Run this from its root:
+Already have the repository? Run this inside the Finrod project folder:
 
 ```sh
 bash scripts/install.sh
@@ -115,4 +118,5 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 | [Operations](docs/OPERATIONS.md) | Service setup, feedback export, data retention, backup, and migration |
 | [Architecture](docs/ARCHITECTURE.md) | Pi integration, components, storage, recovery, and provider configuration |
 | [Validation](docs/VALIDATION.md) | Completed live checks, automated checks, and remaining gaps |
-| [Product requirements](docs/PRD.md) | User outcomes, acceptance criteria, scope, and next steps |
+| [Product requirements](docs/PRD.md) | Single-user v0 scope, acceptance criteria, and next steps |
+| [Roadmap](docs/ROADMAP.md) | Shared-bot v1, user isolation, encryption design, and release gates |
