@@ -15,6 +15,7 @@ Finrod does not implement a separate plugin framework or a model tool loop.
 | Telegram ledger | Persist inbox, cursor, outbox, bot identity, reply references, and votes | `src/telegram/store.ts` |
 | Assistant instructions | Conversation behavior and explicit-save policy | `src/extensions/persona.ts` |
 | Knowledge extension | List, read, save, correct, and delete scoped Markdown topics | `src/extensions/knowledge.ts` |
+| Voice download | Bound download size and retry interrupted transfers | `src/telegram/voice.ts` |
 | Transcription | Convert voice-note bytes to text through a configured HTTP provider | `src/transcription.ts` |
 | Reply contract | Associate answer text with its Durable and model identifiers | `src/reply.ts` |
 | Feedback export | Read private metadata as JSON Lines without loading credentials or mutating state | `src/feedback-export.ts` |
@@ -46,7 +47,8 @@ root conversations receive an explicit baseline tool list. MCP restores
 persisted tool registrations before `harness.resume()`. Runtime code never
 installs Pi's coding tools or supplies a general execution environment.
 
-Add capabilities as scoped Pi Durable extensions. Keep Telegram interaction
+Inspect Pi's existing behavior and the integration before adding capabilities.
+When an addition is necessary, use scoped Pi Durable extensions. Keep Telegram interaction
 logic in the adapter and provider protocols outside it. Extension code is trusted
 application code; Pi's registry is not a sandbox for arbitrary third-party code.
 The current application composes extensions in source, not through automatic
@@ -156,9 +158,21 @@ The default provider is OpenRouter with `openai/whisper-large-v3`. Requests go t
 `/audio/transcriptions` as base64 JSON with `provider.zdr=true`; there is no
 fallback that relaxes ZDR. The local OpenAI-compatible adapter uses multipart
 uploads to the same endpoint path and accepts an optional authentication key.
+Both transports send `TRANSCRIPTION_LANGUAGE` as the `language` field. The
+default is `pt`, including Brazilian Portuguese. OpenRouter requires an ISO-639-1
+code, and Whisper identifies Portuguese as `pt`, not `pt-BR`. Configuration
+normalizes case and surrounding whitespace and rejects empty values or codes
+that are not two letters. Language availability still depends on the selected
+model and provider. This is a recognition hint, not a translation instruction.
+
 These transports do not use the Responses API.
 
-Telegram audio is downloaded into memory with a 20 MiB limit. Finrod retains the
+Telegram audio is downloaded into memory with a 20 MiB limit. The downloader in
+`src/telegram/voice.ts` retries recognized transient network failures up to three
+total attempts, with one-second and two-second delays. Each attempt has a
+30-second deadline and discards partial audio. HTTP errors, empty downloads,
+and size-limit failures are not retried. Exhaustion preserves the final error;
+transcription requests are not retried by this downloader. Finrod retains the
 transcript, not a local audio recording. A crash before transcript persistence
 can repeat transcription and its charge. Large recordings are not automatically
 split and can exceed upstream processing limits.
@@ -176,6 +190,7 @@ For local Whisper:
 TRANSCRIPTION_PROVIDER=openai-compatible
 TRANSCRIPTION_BASE_URL=http://127.0.0.1:8000/v1
 TRANSCRIPTION_MODEL=whisper-1
+TRANSCRIPTION_LANGUAGE=pt
 ```
 
 Use the model ID your server accepts. Set `TRANSCRIPTION_API_KEY` if required.
@@ -201,31 +216,17 @@ settings, not model-accessible files or prompt content.
 - Known secret environment values are redacted from application error messages.
   Logs can still contain personal provider error content; protect them accordingly.
 
-## Verification and limits
+## Verification and references
 
-Run the narrow checks from the checkout:
+[Validation](VALIDATION.md) owns automated coverage, live evidence, and remaining
+gaps. [Operations](OPERATIONS.md) covers service management, retention, and backup.
+[Product direction](../PRODUCT.md) records scope and deferred work.
 
-```sh
-npm run check
-npm run test:telegram
-npm run build && node --test test/knowledge.test.mjs
-```
+Provider references:
 
-The Telegram integration tests use a local HTTP server and real SQLite. They
-cover owner-only input, duplicate updates, uncertain delivery after reopen, and
-feedback linked to the correct messages across restart. Feedback checks include
-changed and repeated votes, foreign-click rejection, and metadata export.
-
-The knowledge test uses Pi's scripted provider with real Durable storage and
-Markdown files. It covers save, correction, reopen, submission deduplication,
-path restrictions, and deletion. These tests do not establish model quality,
-real transcription, or live external connectivity.
-
-The user has observed live text replies. Voice, live feedback, restart continuity,
-backup restore, and VPS migration still need confirmation. No clock tool is
-installed: date answers inferred from web pages can be incorrect or use the
-wrong timezone. Feedback records this kind of issue but does not fix it.
-
-See [PRODUCT.md](../PRODUCT.md) for research and approved scope, and OpenRouter's
-[speech-to-text guide](https://openrouter.ai/docs/guides/overview/multimodal/stt)
-for transcription request and ZDR details.
+- [OpenRouter speech-to-text guide](https://openrouter.ai/docs/guides/overview/multimodal/stt):
+  transcription requests and ZDR routing.
+- [OpenRouter transcription API](https://openrouter.ai/docs/api/api-reference/stt/create-transcription):
+  the `language` field uses an ISO-639-1 code.
+- [Whisper language mapping](https://github.com/openai/whisper/blob/main/whisper/tokenizer.py):
+  Portuguese is `pt`, without a separate Brazilian regional code.

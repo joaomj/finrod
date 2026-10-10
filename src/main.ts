@@ -8,6 +8,7 @@ import { openAssistant } from "./runtime.js";
 import { transcribe } from "./transcription.js";
 import { runTelegram } from "./telegram/adapter.js";
 import { TelegramStore } from "./telegram/store.js";
+import { downloadVoice } from "./telegram/voice.js";
 
 async function main(): Promise<void> {
   process.umask(0o077);
@@ -43,19 +44,8 @@ async function main(): Promise<void> {
           const file = await api.getFile(work.voiceFileId);
           if (!file.file_path) throw new Error("Telegram returned no path for the voice note.");
           if (file.file_size && file.file_size > 20 * 1024 * 1024) throw new Error("Voice note exceeds the 20 MiB download limit.");
-          const response = await fetch(`https://api.telegram.org/file/bot${config.telegram.token}/${file.file_path}`, {
-            signal: AbortSignal.timeout(30_000), redirect: "error",
-          });
-          if (!response.ok) throw new Error(`Telegram voice download failed (HTTP ${response.status}).`);
-          if (!response.body) throw new Error("Telegram returned an empty voice download.");
-          const chunks: Uint8Array[] = [];
-          let size = 0;
-          for await (const chunk of response.body) {
-            size += chunk.length;
-            if (size > 20 * 1024 * 1024) throw new Error("Voice note exceeds the 20 MiB download limit.");
-            chunks.push(chunk);
-          }
-          text = await transcribe(Buffer.concat(chunks), config.transcription);
+          const audio = await downloadVoice(`https://api.telegram.org/file/bot${config.telegram.token}/${file.file_path}`);
+          text = await transcribe(audio, config.transcription);
           activeStore.transcribed(work.updateId, text);
         }
         if (!text) throw new Error(`Telegram update ${work.updateId} has no text or transcript.`);

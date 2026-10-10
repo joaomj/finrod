@@ -3,6 +3,27 @@
 Use this guide after completing the [setup](../README.md). Commands assume the
 default data directory and a systemd user service.
 
+## Install the user service
+
+Create `~/.local/share/finrod` and `~/.config/systemd/user` if needed.
+Copy `deploy/finrod.service.in` to `~/.config/systemd/user/finrod.service`.
+Replace `@PROJECT@` with the absolute checkout path and `@NODE@` with the
+absolute Node executable path. Use paths without spaces.
+
+The template reads `~/.config/finrod/environment`. If you change
+`FINROD_DATA_DIR`, update `ReadWritePaths` in the unit to match it.
+Stop any foreground instance, then enable and start the service:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now finrod.service
+```
+
+Enabling the service starts it when the systemd user manager starts, normally
+at login. It does not run while the machine is powered off or suspended.
+For a dedicated VPS account, enable lingering with `loginctl enable-linger USER`
+to start without an interactive login. This can require administrator permission.
+
 ## Service controls
 
 ```sh
@@ -60,17 +81,26 @@ SQLite read-only and does not need provider credentials. It omits message text
 and transcripts, but includes Telegram identifiers. Treat the output as private;
 keep exported files outside Git. An empty export means no votes are recorded.
 
-## Data, backup, and VPS migration
+## Data and retention
 
 `FINROD_DATA_DIR` defaults to `~/.local/share/finrod`:
 
 | Path | Contents |
 | --- | --- |
 | `conversation.sqlite` and SQLite sidecars | Durable conversation and task state |
-| `telegram.sqlite` and SQLite sidecars | Incoming work, replies, feedback metadata, bot identity, and update cursor |
+| `telegram.sqlite` and SQLite sidecars | Incoming work, voice transcripts and Telegram file IDs, replies, feedback, bot identity, and cursor |
 | `knowledge/` | Authoritative Markdown topic pages |
 | `mcp/` | MCP adapter state and caches |
 | `process-lock.sqlite` | Single-process ownership lock |
+
+Voice notes are downloaded into memory and sent to the transcription provider.
+Finrod does not save the audio file locally. The transcript is stored in
+`telegram.sqlite` and submitted as conversation text to `conversation.sqlite`.
+Telegram retains its own audio copy under its policies. Transcripts, replies,
+and saved topics remain in local storage and backups; deleting a topic does not
+erase conversation history.
+
+## Backup and VPS migration
 
 Back up the entire data directory while the service is stopped. Copy the
 credential file separately through a secure channel. Store backups outside the
@@ -116,12 +146,14 @@ Backup restore and VPS migration have not yet been exercised end to end.
 - A crash during transcription can repeat the provider request and its charge.
   A committed transcript is reused after restart. Audio is downloaded into memory,
   not saved as a local recording. Telegram retains its own copy under its policy.
+- Transient voice-download failures receive up to three attempts. Transcription
+  requests are not automatically retried by the downloader. After a message is
+  marked failed, resend it explicitly; restarting does not replay failed inbox work.
 - Voice downloads are limited to 20 MiB. Large recordings can also hit upstream
   processing limits. Finrod does not split long recordings automatically.
 - ZDR is mandatory for OpenRouter transcription. It does not cover Telegram,
   Exa, local history, backups, or the separate chat-model request. Configure the
-  chat provider's privacy settings independently. The initial user reports
-  account-wide ZDR enabled in OpenRouter, which also covers chat routing.
+  chat provider's privacy settings independently.
 - External integrations are read-only. Exa queries still leave this machine.
 - Pi Durable's pinned SQLite backend uses `synchronous=NORMAL`. Process-crash
   recovery is supported, but power failure can lose recent conversation commits.
@@ -130,18 +162,9 @@ Backup restore and VPS migration have not yet been exercised end to end.
   minutes, then terminates the process; committed work remains available for recovery.
 
 
-## Live acceptance checks
+## Acceptance checks
 
-Local integration tests are not a substitute for these checks:
-
-1. Send `/start`, then a normal text message.
-2. Request a web search and inspect its source links.
-3. Send a short voice note and check the answer against what you said.
-4. Save a named topic, list it, correct it, and resume it.
-5. Rate a new assistant reply, change its vote, and inspect the metadata export.
-6. Restart the service while idle. Continue the conversation and resume the topic.
-7. Check `/status` for uncertain deliveries.
-
-Text replies have been observed by the user. Live voice, feedback, and recovery
-still need confirmation. The assistant has no clock tool; do not rely on a date
-inferred from web pages without a timezone.
+See [Validation](VALIDATION.md) for completed live checks, repeatable acceptance
+steps, automated coverage, and remaining gaps. Keep the distinction between a
+working transport and a factually correct answer: proper names, source claims,
+and timezone-sensitive dates still require judgment.

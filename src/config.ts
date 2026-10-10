@@ -39,6 +39,10 @@ export function loadConfig(env: Environment = process.env) {
   if (transcriptionProvider !== "openrouter" && transcriptionProvider !== "openai-compatible") {
     throw new Error("TRANSCRIPTION_PROVIDER: set openrouter or openai-compatible.");
   }
+  const transcriptionLanguage = (env.TRANSCRIPTION_LANGUAGE ?? "pt").trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(transcriptionLanguage)) {
+    throw new Error("TRANSCRIPTION_LANGUAGE: set a two-letter ISO-639-1 language code, such as pt for Portuguese or en for English. Use pt, not pt-BR.");
+  }
   const transcriptionBaseUrl = transcriptionProvider === "openrouter"
     ? "https://openrouter.ai/api/v1"
     : endpoint("TRANSCRIPTION_BASE_URL", "http://127.0.0.1:8000/v1");
@@ -51,6 +55,7 @@ export function loadConfig(env: Environment = process.env) {
     transcription: {
       provider: transcriptionProvider,
       baseUrl: transcriptionBaseUrl,
+      language: transcriptionLanguage,
       model: env.TRANSCRIPTION_MODEL?.trim() || (transcriptionProvider === "openrouter" ? "openai/whisper-large-v3" : "whisper-1"),
       apiKey: transcriptionProvider === "openrouter"
         ? required("OPENROUTER_API_KEY")

@@ -1,12 +1,22 @@
 # Finrod
 
-A personal Telegram assistant for conversation, web research, voice notes, and
-saved topics. Replies support private thumbs-up and thumbs-down feedback.
+### A personal assistant, one Telegram conversation.
 
-Finrod is an early v0. The local service runs and text replies have been observed.
-Live voice, feedback, restart recovery, and backup restore still need verification.
+Talk through an idea. Research a question. Save a topic and return to it later.
+Finrod combines Pi Durable with Telegram text and voice input, web research,
+and knowledge you explicitly choose to keep.
 
-## Requirements
+**[Quick start](#quick-start)** · **[Usage](#usage)** · **[Why Finrod?](#why-finrod)** · **[Documentation](#documentation)**
+
+> **v0 status:** live text, Portuguese voice transcription, feedback storage,
+> and user-reported summaries work. Backup restore and VPS migration remain
+> unverified. See the [validation record](docs/VALIDATION.md) for evidence and limits.
+
+---
+
+## Quick start
+
+### Requirements
 
 - Linux with Node.js 22.22.1 or a later Node 22 release, and npm.
 - A Telegram bot token from `@BotFather` and your numeric Telegram user ID.
@@ -17,7 +27,7 @@ Live voice, feedback, restart recovery, and backup restore still need verificati
 
 No public HTTP port is required. Keep the machine awake and online.
 
-## 1. Install
+### 1. Install
 
 From the checkout:
 
@@ -26,7 +36,7 @@ npm ci --ignore-scripts
 npm run build
 ```
 
-## 2. Configure
+### 2. Configure
 
 Create `~/.config/finrod/environment` with mode `0600`. Keep credentials outside
 Git. Replace the placeholder values below:
@@ -40,7 +50,13 @@ FINROD_MODEL_PROVIDER=openrouter
 FINROD_MODEL=anthropic/claude-haiku-5.5
 TRANSCRIPTION_PROVIDER=openrouter
 TRANSCRIPTION_MODEL=openai/whisper-large-v3
+TRANSCRIPTION_LANGUAGE=pt
 ```
+
+`TRANSCRIPTION_LANGUAGE` defaults to `pt` (Portuguese), including Brazilian
+Portuguese. Use a two-letter language code such as `en` for English; `pt-BR`
+is not accepted by the transcription API. This setting guides speech recognition,
+not the language of the assistant's replies.
 
 Use the numeric user ID, not your Telegram username. This is the only user the
 bot accepts, and only private chats are supported.
@@ -58,7 +74,7 @@ does not update the service configuration.
 For local Whisper or another chat provider, see
 [configuration alternatives](docs/ARCHITECTURE.md#configuration-alternatives).
 
-## 3. Start
+### 3. Start
 
 For a foreground run:
 
@@ -69,31 +85,10 @@ node --env-file="$HOME/.config/finrod/environment" dist/main.js
 Open your bot in Telegram and send `/start`. If startup fails, fix the setting
 named in the error. Stop the foreground process before installing the service.
 
-### Run as a user service
+For automatic startup, follow [user-service setup](docs/OPERATIONS.md#install-the-user-service).
+Never run a foreground instance and the service at the same time.
 
-Create `~/.local/share/finrod` and `~/.config/systemd/user` if needed.
-Copy `deploy/finrod.service.in` to `~/.config/systemd/user/finrod.service`.
-Replace `@PROJECT@` with the absolute checkout path and `@NODE@` with the
-absolute Node executable path. Use paths without spaces.
-
-Then enable and start the service:
-
-```sh
-systemctl --user daemon-reload
-systemctl --user enable --now finrod.service
-```
-
-Check startup and recent errors:
-
-```sh
-systemctl --user status finrod.service
-journalctl --user -u finrod.service -n 40 --no-pager
-```
-
-Never run two instances for the same bot. After changing code or service
-configuration, rebuild if needed and restart `finrod.service`.
-
-## 4. Try the bot
+## Usage
 
 - Send a normal text message.
 - Ask for web research with source links.
@@ -105,10 +100,26 @@ configuration, rebuild if needed and restart `finrod.service`.
 A resumed topic brings its saved summary into the current conversation. Deleting
 a saved topic does not delete conversation history or backups.
 
-## Next steps
+## Why Finrod?
 
-- [Operations](docs/OPERATIONS.md): feedback export, service controls, live checks,
-  backup, restore, and VPS migration.
-- [Architecture](docs/ARCHITECTURE.md): components, extension boundaries, storage,
-  recovery, privacy, and verification.
-- [Product direction](PRODUCT.md): agreed scope and initial research.
+Finrod Felagund, from J. R. R. Tolkien's *The Silmarillion*, is known for his
+friendship with Men and his loyalty to Beren. He is a fitting namesake for an
+assistant meant to accompany a person, not take over their decisions.
+
+The name expresses three goals:
+
+- **Thoughtful conversation.** Help explore ideas and ask when something is unclear.
+- **Continuity.** Keep the conversation and return to the topics that matter.
+- **Respect for your agency.** Save knowledge on request and keep external sources read-only.
+
+These are design goals, not a claim that the assistant is infallible. Feedback
+helps identify where its behavior falls short.
+
+## Documentation
+
+| Guide | What you will find |
+| --- | --- |
+| [Operations](docs/OPERATIONS.md) | Service setup, feedback export, data retention, backup, and migration |
+| [Architecture](docs/ARCHITECTURE.md) | Pi integration, components, storage, recovery, and provider configuration |
+| [Validation](docs/VALIDATION.md) | Completed live checks, automated checks, and remaining gaps |
+| [Product direction](PRODUCT.md) | Scope, principles, and deliberately deferred work |

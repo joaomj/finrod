@@ -10,6 +10,7 @@ export async function transcribe(audio: Uint8Array, config: Config["transcriptio
     headers["Content-Type"] = "application/json";
     body = JSON.stringify({
       model: config.model,
+      language: config.language,
       provider: { zdr: true },
       response_format: "json",
       input_audio: { data: Buffer.from(audio).toString("base64"), format: "ogg" },
@@ -18,6 +19,7 @@ export async function transcribe(audio: Uint8Array, config: Config["transcriptio
     path = "/audio/transcriptions";
     const form = new FormData();
     form.set("model", config.model);
+    form.set("language", config.language);
     form.set("file", new Blob([new Uint8Array(audio)], { type: "audio/ogg" }), "voice.ogg");
     form.set("response_format", "json");
     body = form;
