@@ -5,6 +5,43 @@ Pi Durable owns conversation execution. The core stays small by using Pi's
 provider collection, extension registry, tools, and recovery machinery.
 Finrod does not implement a separate plugin framework or a model tool loop.
 
+## System overview
+
+```mermaid
+flowchart TB
+    owner["Owner"] <-->|"Private text, voice, votes / replies"| telegram["Telegram Bot API"]
+
+    subgraph host["Finrod host"]
+        adapter["Telegram adapter"]
+        voice["Voice download and transcription adapter"]
+        runtime["Pi Durable"]
+        topics["Scoped topic tools"]
+        mcp["Restricted MCP adapter"]
+        ledger[("Telegram SQLite ledger")]
+        conversation[("Durable SQLite state")]
+        knowledge["Markdown topics"]
+
+        adapter <-->|"Conversation input / answer"| runtime
+        adapter <-->|"Voice / transcript"| voice
+        adapter <-->|"Inbox, transcripts, replies, votes"| ledger
+        runtime <-->|"Conversation and task state"| conversation
+        runtime <-->|"Explicit topic operations"| topics
+        topics <-->|"Scoped reads and writes"| knowledge
+        runtime <-->|"Allowlisted web tools"| mcp
+    end
+
+    telegram <-->|"Outbound polling / API requests"| adapter
+    runtime <-->|"Model requests / responses"| llm["Configured LLM provider"]
+    voice <-->|"Audio / transcribed text"| stt["Transcription service"]
+    mcp <-->|"Search and fetch"| exa["Exa MCP"]
+```
+
+Finrod runs as one application process. Its databases and Markdown files are
+separate stores, not one shared transaction. External services do not receive
+unrestricted access to local storage. Local transcription may run on the same
+machine but remains a separate service. Feedback goes to the Telegram ledger
+without starting a model turn.
+
 ## Components
 
 | Component | Responsibility | Implementation |
@@ -226,7 +263,7 @@ settings, not model-accessible files or prompt content.
 
 [Validation](VALIDATION.md) owns automated coverage, live evidence, and remaining
 gaps. [Operations](OPERATIONS.md) covers service management, retention, and backup.
-[Product direction](../PRODUCT.md) records scope and deferred work.
+[Product requirements](PRD.md) records scope, acceptance criteria, and next steps.
 
 Provider references:
 

@@ -10,7 +10,7 @@ and knowledge you explicitly choose to keep.
 **[Quick start](#quick-start)** · **[Usage](#usage)** · **[Why Finrod?](#why-finrod)** · **[Documentation](#documentation)**
 
 > **v0 status:** live text, Portuguese voice transcription, feedback storage,
-> and user-reported summaries work. Backup restore and VPS migration remain
+> saved-topic save/resume, and conversation continuity across restarts work. Backup restore and VPS migration remain
 > unverified. See the [validation record](docs/VALIDATION.md) for evidence and limits.
 
 ---
@@ -129,4 +129,4 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 | [Operations](docs/OPERATIONS.md) | Service setup, feedback export, data retention, backup, and migration |
 | [Architecture](docs/ARCHITECTURE.md) | Pi integration, components, storage, recovery, and provider configuration |
 | [Validation](docs/VALIDATION.md) | Completed live checks, automated checks, and remaining gaps |
-| [Product direction](PRODUCT.md) | Scope, principles, and deliberately deferred work |
+| [Product requirements](docs/PRD.md) | User outcomes, acceptance criteria, scope, and next steps |
