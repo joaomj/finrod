@@ -3,26 +3,87 @@
 Use this guide after completing the [setup](../README.md). Commands assume the
 default data directory and a systemd user service.
 
-## Install the user service
+## Installation
 
-Create `~/.local/share/finrod` and `~/.config/systemd/user` if needed.
-Copy `deploy/finrod.service.in` to `~/.config/systemd/user/finrod.service`.
-Replace `@PROJECT@` with the absolute checkout path and `@NODE@` with the
-absolute Node executable path. Use paths without spaces.
+Run `bash scripts/install.sh` from the checkout as a non-root user. The script
+resolves its checkout path, so it also works when invoked from another directory.
+Use `bash scripts/install.sh --help` for a short description.
 
-The template reads `~/.config/finrod/environment`. If you change
-`FINROD_DATA_DIR`, update `ReadWritePaths` in the unit to match it.
-Stop any foreground instance, then enable and start the service:
+The installer requires a working systemd user manager. Run it from the intended
+user's login session, not through `sudo`. It offers to install missing OS packages
+with `sudo apt-get` on Debian/Ubuntu. Other distributions must supply equivalent
+prerequisites. Automatic Node installation targets glibc Linux x86_64 or arm64.
+
+A compatible Node 22 installation is reused. Otherwise, the installer downloads
+the current Node 22 archive from `nodejs.org`, checks its published SHA-256 digest,
+and installs it under `~/.local/share/finrod-runtime/node`. It does not replace
+system Node or change shell startup files. That runtime is separate from bot data
+and need not be included in conversation backups.
+
+### Configuration and reruns
+
+On first installation, prompts collect provider choices and credentials. Chat
+model selection is explicit and checked against the installed Pi catalog.
+Optional transcription settings use application defaults when omitted. The
+installer checks credentials for presence, not validity with the provider.
+A local transcription server must already be configured separately.
+
+Configuration is stored at `~/.config/finrod/environment` with mode `0600`.
+The script never sources this file as shell code. New values use single-quoted
+assignments; prompted values cannot contain single quotes or carriage returns.
+Existing regular configuration files are preserved, including custom data paths.
+The installer does not import a checkout `.env` or overwrite it.
+
+Reruns ask before stopping an active service for dependency installation and
+building. A failure after that stop leaves the service stopped: resolve the
+reported error and rerun rather than assume the old build is intact. Updates
+are not an atomic deployment or an automatic rollback.
+
+A differing service unit is replaced only after confirmation, with a backup
+beside it. Configuration and data are not reset. Paths used in the service must
+be absolute and contain only letters, digits, underscores, dots, slashes, or
+hyphens. Symlinked environment files and service units are rejected rather than
+silently modifying their targets.
+
+Output is also written to a private `/tmp/finrod-install.*.log` file. Entered API
+keys are not echoed or printed. Inspect logs before sharing them: dependency and
+service errors can contain local details. A started service does not establish
+live Telegram, model, Exa, or transcription connectivity.
+
+### Manual setup
+
+For a foreground run without the installer or systemd, install Node 22.22.1 or a
+later Node 22 release and npm. Create the private environment file using the
+[configuration reference](ARCHITECTURE.md#configuration-alternatives), then run:
+
+```sh
+npm ci --ignore-scripts --include=dev
+npm run build
+node --env-file="$HOME/.config/finrod/environment" dist/main.js
+```
+
+Finrod does not load a checkout `.env` automatically. Pass its path explicitly
+with `--env-file` if using one for foreground operation. The user service reads
+only `~/.config/finrod/environment`.
+
+To install the service manually, create `~/.local/share/finrod` and
+`~/.config/systemd/user`. Copy `deploy/finrod.service.in` to
+`~/.config/systemd/user/finrod.service`. Replace `@PROJECT@` with the checkout,
+`@NODE@` with the Node executable, and `@DATA@` with the configured data directory.
+Use absolute paths. Stop the foreground instance, then run:
 
 ```sh
 systemctl --user daemon-reload
 systemctl --user enable --now finrod.service
 ```
 
+### Startup without login
+
 Enabling the service starts it when the systemd user manager starts, normally
 at login. It does not run while the machine is powered off or suspended.
 For a dedicated VPS account, enable lingering with `loginctl enable-linger USER`
 to start without an interactive login. This can require administrator permission.
+The installer does not change lingering settings automatically.
 
 ## Service controls
 

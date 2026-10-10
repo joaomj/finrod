@@ -30,58 +30,44 @@ Finrod needs four components:
   OpenAI-compatible service, such as [Whisper](https://github.com/openai/whisper).
   Text-only use does not call the transcription service.
 
-To run the current implementation, use Linux with [Node.js](https://nodejs.org/)
-22.22.1 or a later Node 22 release, and [npm](https://docs.npmjs.com/).
+### Install and start
 
-**Optional:** an [Exa API key](https://exa.ai/docs/get-started/exa-mcp) for
-account-based web-search access; keyless access is supported. A
-[systemd](https://systemd.io/) user service provides automatic startup but is not
-needed for a foreground run.
+On Linux, run as your normal user from an interactive terminal:
 
+```sh
+git clone https://github.com/joaomj/finrod.git && bash finrod/scripts/install.sh
+```
+
+Already have the checkout? Run this from its root:
+
+```sh
+bash scripts/install.sh
+```
+
+The installer:
+
+1. Checks prerequisites and installs a compatible [Node.js](https://nodejs.org/)
+   runtime and [npm](https://docs.npmjs.com/) if needed.
+2. Prompts for Telegram access, a chat provider and model, and transcription settings.
+3. Writes private configuration outside Git, installs locked dependencies, and builds Finrod.
+4. Installs and starts the [systemd](https://systemd.io/) user service.
+
+API-key input is hidden. An [Exa API key](https://exa.ai/docs/get-started/exa-mcp)
+is optional; leave it blank for keyless search. The installer does not create
+provider accounts or install a local transcription server.
+
+You need Git, Bash, and a working systemd user session. Missing operating-system
+packages can be installed through `sudo` on Debian/Ubuntu after confirmation.
+Automatic Node installation supports glibc Linux on x86_64 and arm64. Other hosts
+need compatible prerequisites already installed.
+
+Rerunning preserves configuration and data. It asks before stopping a running
+service for an update or replacing a different service unit. After installation,
+open your bot in Telegram and send `/start`, then try text and a short voice note.
+
+For configuration locations, installation logs, manual setup, and VPS startup
+without login, see [Operations](docs/OPERATIONS.md#installation).
 No public HTTP port is required. Keep the machine awake and online.
-
-### 1. Install
-
-From the checkout:
-
-```sh
-npm ci --ignore-scripts
-npm run build
-```
-
-### 2. Configure
-
-Create `~/.config/finrod/environment` with mode `0600`. Keep credentials outside
-Git. Follow the [configuration reference](docs/ARCHITECTURE.md#configuration-alternatives)
-to configure:
-
-1. Your Telegram bot token and numeric user ID.
-2. Your chosen Pi model provider, model ID, and provider credentials.
-3. Your transcription service and any overrides it needs.
-
-The current implementation requires `FINROD_MODEL_PROVIDER` and `FINROD_MODEL`;
-it does not choose a chat model automatically. Use values supported by the
-installed Pi version and your provider account. Optional settings can be omitted
-when their documented defaults suit your setup.
-
-Finrod does not automatically load a checkout `.env`. For foreground use, pass
-its path with `--env-file`. The user service reads only
-`~/.config/finrod/environment`. Changing your checkout `.env` after installation
-does not update the service configuration.
-
-### 3. Start
-
-For a foreground run:
-
-```sh
-node --env-file="$HOME/.config/finrod/environment" dist/main.js
-```
-
-Open your bot in Telegram and send `/start`. If startup fails, fix the setting
-named in the error. Stop the foreground process before installing the service.
-
-For automatic startup, follow [user-service setup](docs/OPERATIONS.md#install-the-user-service).
-Never run a foreground instance and the service at the same time.
 
 ## Usage
 

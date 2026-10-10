@@ -17,7 +17,7 @@ UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=%h/.local/share/finrod
+ReadWritePaths=@DATA@
 
 [Install]
 WantedBy=default.target

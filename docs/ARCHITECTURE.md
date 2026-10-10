@@ -44,6 +44,12 @@ without starting a model turn.
 
 ## Components
 
+Deployment is separate from conversation execution. `scripts/install.sh` installs
+prerequisites, builds the checkout, and configures the user service.
+`scripts/validate-install.mjs` checks the private configuration and pinned model
+catalog without starting the bot or making provider requests. See
+[Operations](OPERATIONS.md#installation) for rerun and failure behavior.
+
 | Component | Responsibility | Implementation |
 | --- | --- | --- |
 | Service composition | Validate configuration, acquire a process lock, start and close components | `src/main.ts`, `src/config.ts` |

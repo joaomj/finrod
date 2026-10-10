@@ -69,6 +69,7 @@ Run the focused check for the changed area from the checkout:
 | Command | Coverage |
 | --- | --- |
 | `npm run check` | TypeScript types across the application |
+| `npm run test:install` | First-install prompts, real dependency installation/build, unit verification, and configuration/data preservation on rerun |
 | `npm run test:telegram` | Owner-only intake, replay deduplication, uncertain delivery after reopen, and per-message feedback |
 | `npm run test:voice` | Interrupted audio download, clean retry, bounded exhaustion, and preservation of the final error |
 | `npm run build && node --test test/knowledge.test.mjs` | Topic save, correction, reopen, request deduplication, path restrictions, and deletion |
@@ -78,6 +79,25 @@ SQLite and Markdown files. The knowledge test uses Pi's scripted provider, not
 a paid model. The four integration tests do not measure answer quality or prove
 provider availability. The knowledge check passed during initial implementation;
 it was not rerun for the voice-download-only repair.
+
+### Installer smoke test
+
+The installer test passed using a temporary checkout, home directory, runtime
+directory, and fake credentials. It exercised real `npm ci`, compilation, model
+catalog validation, and `systemd-analyze` verification on both first installation
+and rerun. The rerun preserved an owner-edited environment file, its `0600`
+permissions, a saved topic, and the generated service unit. Captured terminal
+output and installer logs did not contain the test credentials.
+
+Only service control is substituted: no real bot or user service is started or
+stopped. The test requires Python 3, a compatible Node/npm installation, systemd
+verification tools, and access to the public npm registry. It runs as a non-root
+Linux user and can take longer than the application integration checks.
+
+This verifies the path with prerequisites already installed. Automatic Node
+download, privileged OS-package installation, and first startup on a fresh host
+remain unverified. Syntax and ShellCheck checks also pass; they do not replace
+those deployment checks.
 
 ## Repeatable smoke checks
 
