@@ -1,0 +1,149 @@
+name: CI and release
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  checks:
+    name: Build, tests, and installer checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --include=dev --no-audit --no-fund
+      - name: Check types and build
+        run: npm run check && npm run build
+      - name: Run application integration tests
+        run: node --test test/telegram.test.mjs test/knowledge.test.mjs test/voice.test.mjs
+      - name: Check installer syntax and shell safety
+        run: |
+          bash -n scripts/install.sh
+          shellcheck scripts/install.sh
+          node --check scripts/validate-install.mjs
+      - name: Verify isolated installation and rerun
+        run: npm run test:install
+      - name: Verify release metadata
+        env:
+          RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+        run: |
+          node --input-type=module <<'JS'
+          import { existsSync, readFileSync } from 'node:fs';
+          const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          if (pkg.version !== lock.version || pkg.version !== lock.packages[''].version) {
+            throw new Error('Package and lockfile versions differ.');
+          }
+          const tag = process.env.RELEASE_TAG;
+          if (tag) {
+            if (!/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag) || tag !== `v${pkg.version}`) {
+              throw new Error('Release tag must be vMAJOR.MINOR.PATCH and match package.json.');
+            }
+            const notes = `docs/releases/${tag}.md`;
+            if (existsSync(notes) && !readFileSync(notes, 'utf8').trim()) {
+              throw new Error('Optional release notes must not be empty.');
+            }
+          }
+          JS
+
+  dependencies:
+    name: Dependency security audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Audit production and development dependencies
+        run: npm audit --package-lock-only --audit-level=high
+
+  codeql:
+    name: CodeQL security analysis
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        id: analysis
+        with:
+          output: codeql-results
+          upload-database: false
+      - name: Enforce security findings threshold
+        env:
+          SARIF_DIRECTORY: ${{ steps.analysis.outputs.sarif-output }}
+        run: node scripts/check-codeql.mjs "$SARIF_DIRECTORY"
+
+  release:
+    name: Publish checked release
+    needs: [checks, dependencies, codeql]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Publish release without deploying
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          existing=$(gh api --paginate "repos/$GH_REPO/releases" --jq '.[] | select(.tag_name == env.RELEASE_TAG) | [.target_commitish, .draft, .html_url] | @tsv')
+          if [[ -n "$existing" ]]; then
+            IFS=$'\t' read -r target draft url <<< "$existing"
+            if [[ "$target" != "$GITHUB_SHA" || "$draft" != false ]]; then
+              printf '%s\n' 'An existing release does not match this publication; inspect it manually.' >&2
+              exit 1
+            fi
+            printf 'Release already published: %s\n' "$url"
+          else
+            notes=()
+            if [[ -f "docs/releases/$RELEASE_TAG.md" ]]; then
+              notes=(--notes-file "docs/releases/$RELEASE_TAG.md")
+            fi
+            gh release create "$RELEASE_TAG" --verify-tag --target "$GITHUB_SHA" \
+              --title "Finrod $RELEASE_TAG" --generate-notes "${notes[@]}"
+          fi

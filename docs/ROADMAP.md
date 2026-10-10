@@ -5,6 +5,29 @@ The [v0 PRD](PRD.md) defines the single-user product;
 [Validation](VALIDATION.md) records what has actually been demonstrated.
 Nothing in the v1 design below is implemented or a current privacy guarantee.
 
+## Self-hosting is the product model
+
+Finrod is software that users or instance operators run on infrastructure they
+choose: a personal computer, a VPS, or another supported host. The project does
+not operate a central service that stores everyone's conversations. No central
+Finrod account is required, and conversation content must not be sent to a
+project-operated backend. No central telemetry is required for normal operation.
+
+Operators control admission, provider credentials, storage, backups, retention,
+and upgrade timing. A household can share its own instance; another operator can
+serve a larger authorized community. Shared hosting makes that operator a data
+custodian, not the Finrod project. Self-hosting does not remove the project's
+responsibility for secure defaults, security fixes, and honest privacy claims.
+
+Telegram and configured model, transcription, and search providers still receive
+the data required for their functions. Self-hosting is not an offline-operation
+or end-to-end-encryption guarantee. The selected host's administrator may have
+privileged access; explain that boundary to invited users.
+
+GitHub automation checks and publishes software. It must not require instance
+credentials, SSH access, private conversation data, or automatic deployments to
+operators' servers. Operators decide when and where to install each release.
+
 ## v0.1.0: one user per bot instance
 
 The first release preserves the architecture proven locally and on the VPS:
@@ -19,9 +42,9 @@ is not encrypted by the application, and a server administrator can read it.
 
 ## v1 target: one bot for hundreds of users
 
-One Telegram bot and one deployed Finrod service should serve hundreds of
-authorized people in separate private chats. Users must not need another bot,
-service account, or VPS. Each user gets independent conversation history, saved
+One Telegram bot and one self-hosted Finrod service should serve hundreds of
+authorized people in separate private chats. Invited users must not need another bot, service account, or VPS;
+the instance operator chooses and manages the shared host. Each user gets independent conversation history, saved
 knowledge, transcripts, and feedback. Shared household or organizational memory
 is not implicit in membership and is outside this initial multi-user scope.
 
@@ -188,7 +211,7 @@ before measuring the current design.
 
 ### 5. Pilot and release v1
 
-Start with a small invited group on the shared bot, inspect failures and feedback,
+Start with a small invited group on an operator-owned bot, inspect failures and feedback,
 and expand only after the isolation, privacy, recovery, and capacity gates pass.
 The existing v0.1.0 tag remains the single-user reference; it is not a drop-in
 rollback once new multi-user or encrypted state has been written.

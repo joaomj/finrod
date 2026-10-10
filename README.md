@@ -1,11 +1,12 @@
 # Finrod
 
-### A personal assistant, one Telegram conversation.
+### A self-hosted personal assistant, one Telegram conversation.
 
 Talk through an idea. Research a question. Save a topic and return to it later.
 Finrod combines [Pi Durable](https://github.com/earendil-works/pi/tree/main/packages/durable)
 with [Telegram](https://telegram.org/) text and voice input, web research,
-and knowledge you explicitly choose to keep.
+and knowledge you explicitly choose to keep. You choose where it runs and
+control its configuration and stored data; no central Finrod account is required.
 
 **[Quick start](#quick-start)** · **[Usage](#usage)** · **[Why Finrod?](#why-finrod)** · **[Documentation](#documentation)**
 
@@ -13,8 +14,8 @@ and knowledge you explicitly choose to keep.
 > continuity after migration are verified. Saved topics and a stopped-service
 > backup were preserved. See [Validation](docs/VALIDATION.md) for evidence and
 > the remaining checks. [The v1 roadmap](docs/ROADMAP.md) targets one shared bot
-> for hundreds of users; multi-user isolation and encrypted storage are not
-> implemented in this release.
+> for hundreds of users on operator-controlled infrastructure; multi-user
+> isolation and encrypted storage are not implemented in this release.
 
 ---
 
@@ -35,7 +36,9 @@ This release serves one Telegram user per instance. Finrod needs four components
 
 ### Install and start
 
-On Linux, run as your normal user from an interactive terminal:
+Choose a published version from [Releases](https://github.com/joaomj/finrod/releases),
+or use the latest `master` checkout below. On Linux, run as your normal user
+from an interactive terminal:
 
 ```sh
 git clone https://github.com/joaomj/finrod.git && bash finrod/scripts/install.sh
@@ -119,4 +122,5 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 | [Architecture](docs/ARCHITECTURE.md) | Pi integration, components, storage, recovery, and provider configuration |
 | [Validation](docs/VALIDATION.md) | Completed live checks, automated checks, and remaining gaps |
 | [Product requirements](docs/PRD.md) | Single-user v0 scope, acceptance criteria, and next steps |
-| [Roadmap](docs/ROADMAP.md) | Shared-bot v1, user isolation, encryption design, and release gates |
+| [Roadmap](docs/ROADMAP.md) | Self-hosted shared-bot v1, isolation, encryption, and release gates |
+| [Releasing](docs/RELEASING.md) | CI checks, security gates, and tagged releases without automatic deployment |

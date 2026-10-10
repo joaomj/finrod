@@ -9,8 +9,8 @@ scope rather than introducing new capabilities or a second product plan.
 
 ## Purpose and user
 
-Finrod helps one person think through questions, research subjects, and return
-to unfinished discussions through Telegram text and voice. The user should not
+Finrod is self-hosted software. It helps one person think through questions,
+research subjects, and return to unfinished discussions through Telegram text and voice. The user should not
 need to reconstruct context after restarting the service or maintain a separate
 knowledge application to preserve a useful topic.
 
@@ -20,6 +20,10 @@ but distinct responsibilities.
 
 ## Principles
 
+- **Self-hosting is the product model.** Operators choose their host and control
+  credentials, data, access, backups, retention, and upgrades. No central Finrod
+  account or project-operated conversation backend is required. External model,
+  transcription, search, and Telegram services retain their own privacy boundaries.
 - **Pi is the engine.** Reuse Pi Durable for conversation execution, context
   management, tools, and recovery. Inspect existing Pi behavior and the integration
   before adding capabilities. Do not build another agent or plugin framework.
@@ -105,7 +109,8 @@ QMD indexing, automatic memory extraction, autonomous ingestion, background
 agents, automatic feedback-driven changes, voice output, groups,
 a visual discussion graph, and a feedback dashboard remain outside v0.
 Multiple users also remain outside v0; shared-bot support for hundreds of users
-is now the planned v1 direction in [Roadmap](ROADMAP.md).
+on operator-controlled infrastructure is now the planned v1 direction in
+[Roadmap](ROADMAP.md), not a hosted service operated by this project.
 
 ## Document ownership
 
