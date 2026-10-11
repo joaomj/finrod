@@ -8,10 +8,23 @@ See [Phone PRD](PHONE-PRD.md) for the approved requirements.
 ## Intended experience
 
 Open Finrod in the phone's browser, enter a personal OpenRouter key, and exchange
-text messages. The initial default is `anthropic/claude-haiku-5.5` through OpenRouter.
+text messages. Open **Settings** to enter the key. The initial default is
+`anthropic/claude-haiku-5.5` through OpenRouter.
 Pi agent-core runs the conversation and tool loop in the browser.
 Requests go directly to OpenRouter and Exa; no Finrod backend processes messages.
 A static website distributes application files only.
+
+The interface is dark-only and contains one conversation. Settings contains
+credentials, export, restore, and privacy information. Answers support Markdown
+and clickable source links. Raw HTML cannot execute, links allow only HTTP or
+HTTPS, and model-supplied images do not load. Web research appears in a collapsed
+activity disclosure, not as separate tool cards.
+
+The composer expands as you type. On desktop, Enter sends and Shift+Enter adds a
+line. On touch devices, Enter adds a line; select Send to submit. During an
+answer, Stop replaces Send. You can draft another message without submitting it.
+Scrolling up pauses automatic following. Select **Jump to latest** to follow
+new output again. There is no task dashboard or unattended agent operation.
 
 Finrod supplies the device's current date and timezone to the model. Exa's
 `web_search_exa` and `web_fetch_exa` tools provide search and page retrieval.
@@ -96,12 +109,12 @@ expected adaptation. The server's third-party MCP adapter remains unchanged.
 
 ## Export and restore
 
-Select **Export history** to download `finrod-history.json`. Keep this file
-private: it includes conversation and tool content and is not encrypted.
+In **Settings**, select **Export history** to download `finrod-history.json`.
+Keep this file private: it includes conversation and tool content and is not encrypted.
 The configured provider key is not included. Export is unavailable during a turn.
 
-Select a file under **Restore backup** and confirm replacement. Export current
-history first if you need to retain it. Finrod validates the supported backup
+In **Settings**, select **Restore backup**, choose a file, and confirm replacement.
+Export current history first if you need to retain it. Finrod validates the supported backup
 format before replacement; invalid files leave current history unchanged.
 Restored unfinished work is marked interrupted. Restore does not start a request.
 
@@ -134,6 +147,11 @@ Passed locally: server typechecking, browser typechecking/bundling, all three
 controlled scenarios, and both live browser checks. The live model completed a
 research turn and cited a source. A provider-error credential leak found during
 verification was repaired and its regression check passes.
+
+The dark chat interface passes the same three controlled scenarios. No new test
+cases were added. A separate desktop Brave walkthrough checked desktop and
+phone-sized layouts, Markdown, safe links, image suppression, and scroll
+navigation. Reduced viewport height was checked without a real phone keyboard.
 
 Still unverified: actual iPhone behavior, the second user's Chrome phone session,
 phone-only setup, abrupt device termination, and large-history performance.

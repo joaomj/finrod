@@ -107,21 +107,29 @@ async function preview(t, { legacy, liveExa = false, liveModel = false } = {}) {
     }, [...legacy]);
   }
   await page.goto(origin);
-  await page.waitForFunction(() => !document.querySelector("#send").disabled);
+  await page.waitForFunction(() => !document.querySelector("#message").disabled);
   return { page, context, modelRequests, toolCalls };
 }
+async function openSettings(page) {
+  if (!await page.locator("#settings").evaluate(dialog => dialog.open)) await page.locator("#settings-open").click();
+}
 async function send(page, text = "What was São Paulo's match score yesterday?") {
+  await openSettings(page);
   await page.locator("#provider-key").fill(sessionKey);
+  await page.locator("#settings-done").click();
   await page.locator("#message").fill(text);
   await page.locator("#send").click();
 }
 async function finished(page) {
-  await page.waitForFunction(() => !document.querySelector("#send").disabled && document.querySelector("#status").textContent.includes("Conversation saved"));
+  await page.waitForFunction(() => document.querySelector("#stop").hidden && document.querySelector("#status").dataset.state === "ready");
 }
 async function backup(page) {
+  await openSettings(page);
   const download = page.waitForEvent("download");
   await page.locator("#export").click();
-  return JSON.parse(await readFile(await (await download).path(), "utf8"));
+  const exported = JSON.parse(await readFile(await (await download).path(), "utf8"));
+  await page.locator("#settings-done").click();
+  return exported;
 }
 
 test("phone user migrates old history, researches, reopens, and exports/restores without replay", { timeout: 20_000 }, async t => {
@@ -140,7 +148,7 @@ test("phone user migrates old history, researches, reopens, and exports/restores
   const exported = await backup(page);
   assert.equal(exported.status, "idle");
   assert(!JSON.stringify(exported).includes(sessionKey));
-  await page.reload(); await page.waitForFunction(() => !document.querySelector("#send").disabled);
+  await page.reload(); await page.waitForFunction(() => !document.querySelector("#message").disabled);
   assert.equal(await page.locator("#provider-key").inputValue(), "");
   assert.match(await page.locator("#history").innerText(), /São Paulo won 2–1/);
   assert.equal(modelRequests.length, 3, "Reopening must not issue another paid request");
@@ -148,9 +156,11 @@ test("phone user migrates old history, researches, reopens, and exports/restores
   await second.waitForFunction(() => document.querySelector("#status").textContent.includes("Another Finrod page"));
   await second.close();
   page.on("dialog", dialog => dialog.accept());
+  await openSettings(page);
   await page.locator("#restore").setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(exported)) });
   await page.waitForFunction(() => document.querySelector("#status").textContent.includes("History restored"));
   assert.deepEqual(await backup(page), exported);
+  await openSettings(page);
   await page.locator("#restore").setInputFiles({ name: "bad.json", mimeType: "application/json", buffer: Buffer.from('{"format":"finrod-phone","version":9}') });
   await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Unsupported or damaged"));
   assert.deepEqual(await backup(page), exported, "Invalid restore must preserve existing history");
@@ -167,9 +177,9 @@ test("interrupted tool work reopens as failed, is not replayed, and supplies val
     await route.abort();
   });
   await send(page);
-  await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Exa: web_search_exa"));
+  await page.waitForFunction(() => document.querySelector("#status").textContent.includes("Searching the web"));
   await page.reload(); release();
-  await page.waitForFunction(() => !document.querySelector("#send").disabled);
+  await page.waitForFunction(() => !document.querySelector("#message").disabled);
   assert.match(await page.locator("#status").innerText(), /interrupted/);
   assert.equal(modelRequests.length, 1);
   const exported = await backup(page);
@@ -204,16 +214,16 @@ test("storage failure blocks paid work; provider failure is visible and credenti
   await send(page);
   await page.waitForFunction(() => document.querySelector("#status").textContent.includes("could not be saved"));
   assert.equal(modelRequests.length, 0, "Saving input must precede inference");
-  await page.reload(); await page.waitForFunction(() => !document.querySelector("#send").disabled);
+  await page.reload(); await page.waitForFunction(() => !document.querySelector("#message").disabled);
   await page.route("https://openrouter.ai/**", route => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: { message: `Invalid key ${sessionKey}` } }) }));
   await send(page);
-  await page.waitForFunction(() => !document.querySelector("#send").disabled && document.querySelector("#status").dataset.state === "error");
+  await page.waitForFunction(() => !document.querySelector("#message").disabled && document.querySelector("#status").dataset.state === "error");
   assert.match(await page.locator("#status").innerText(), /Invalid key/);
   assert(!(await page.locator("#status").innerText()).includes(sessionKey));
   const exported = await backup(page);
   assert.equal(exported.status, "failed");
   assert(!JSON.stringify(exported).includes(sessionKey));
-  await page.reload(); await page.waitForFunction(() => !document.querySelector("#send").disabled);
+  await page.reload(); await page.waitForFunction(() => !document.querySelector("#message").disabled);
   assert.equal((await backup(page)).status, "failed");
   assert(!JSON.stringify(await backup(page)).includes(sessionKey), "Persisted errors must remain redacted after reopening");
 });
@@ -237,7 +247,9 @@ test("Haiku performs a complete research conversation through live OpenRouter an
 }, async t => {
   assert(process.env.OPENROUTER_API_KEY, "OPENROUTER_API_KEY is required for the live model check");
   const { page } = await preview(t, { liveExa: true, liveModel: true });
+  await openSettings(page);
   await page.locator("#provider-key").fill(process.env.OPENROUTER_API_KEY);
+  await page.locator("#settings-done").click();
   await page.locator("#message").fill("Use web_search_exa exactly once to find the official Exa MCP documentation. Request one result. Reply with one short sentence and its source URL.");
   await page.locator("#send").click();
   await finished(page);

@@ -31,6 +31,7 @@ await build({
   entryPoints: ["web/main.ts"],
   outdir: output,
   bundle: true,
+  minify: true,
   platform: "browser",
   format: "esm",
   splitting: true,

@@ -24,6 +24,10 @@ the same website do not share a conversation, account, or local database.
 
 ## Principles
 
+- **Conversation is the product.** Use a minimal, dark-only chat interface.
+  Keep credentials and backup controls in Settings. Web research supports the
+  conversation; it is not a general-purpose agent interface. Do not add task
+  dashboards, workspace panels, or agent controls.
 - **Execution stays on the phone.** Run the assistant and tool orchestration in
   the browser. A static website distributes application files only.
 - **Pi supplies the agent engine.** Use `@earendil-works/pi-agent-core` and Pi AI.
@@ -75,6 +79,7 @@ Do not add that machinery for hypothetical future features.
 | Web research | Search and retrieve pages through Exa MCP. Return source links and distinguish retrieved evidence from unsupported claims. |
 | Date-aware questions | Supply the device's current date and timezone so relative dates have an explicit reference. Treat the device clock as a reference, not verified external time. |
 | Local continuity | Restore saved history and usable model context after closing and reopening the browser. Re-enter credentials when required. |
+| Chat-first interface | Show one dark-only conversation, formatted answers, source links, an expanding composer, and compact research activity. Respect the reader when they scroll away from new output. |
 | Visible progress | Stream replies and periodically persist partial progress. Identify restored partial replies as incomplete. |
 | Safe interruption | Cancel active work when the page becomes hidden where cancellation is possible. On reopening, mark unfinished work interrupted without automatically replaying model or tool requests. |
 | Reliable persistence | Save input before starting paid work. Save finalized assistant and tool messages before continuing the model/tool loop. Report saving failures and block unsafe continuation. |

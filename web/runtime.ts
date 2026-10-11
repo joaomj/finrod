@@ -6,11 +6,11 @@ import { openHistory } from "./storage.js";
 import { openExa } from "./mcp.js";
 
 export const MODEL = "anthropic/claude-haiku-5.5";
-export type ChatMessage = { role: "user" | "assistant" | "tool"; text: string; partial: boolean; error?: string };
+export type ChatMessage = { role: "user" | "assistant" | "tool"; text: string; partial: boolean; toolName?: string; error?: string };
 
 function displayed(message: SavedMessage, partial = false): ChatMessage[] {
   if (message.role === "user") return [{ role: "user", text: typeof message.content === "string" ? message.content : message.content.map(block => block.type === "text" ? block.text : "").join("\n"), partial }];
-  if (message.role === "toolResult") return [{ role: "tool", text: `${message.toolName}: ${message.isError ? "failed or interrupted" : "completed"}`, partial: false,
+  if (message.role === "toolResult") return [{ role: "tool", text: `${message.toolName}: ${message.isError ? "failed or interrupted" : "completed"}`, partial: false, toolName: message.toolName,
     ...(message.isError ? { error: message.content.map(block => block.type === "text" ? block.text : "").join("\n") } : {}) }];
   const text = message.content.filter(block => block.type === "text").map(block => block.text).join("\n");
   const error = message.stopReason === "error" || message.stopReason === "aborted" ? message.errorMessage ?? "Answer interrupted or failed; it is incomplete." : undefined;
@@ -62,7 +62,7 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
       interrupted = false;
       let exa: Awaited<ReturnType<typeof openExa>> | undefined;
       try {
-        report("Connecting directly to Exa. Keyless access has rate limits.", "working");
+        report("Connecting…", "working");
         exa = await openExa(operation.signal);
         if (operation.signal.aborted || document.hidden) throw new Error("Request interrupted before it started.");
         history.status = "pending";
@@ -80,15 +80,16 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
           history.messages = agent!.state.messages.filter(message => message.role !== "system") as SavedMessage[];
           if (event.type === "message_update" && event.message.role === "assistant") {
             history.partial = structuredClone(event.message);
+            if (event.message.content.some(block => block.type === "text" && block.text)) report("Answering…", "working");
             refresh();
             if (Date.now() - lastPartialSave >= 500) { await persist(); lastPartialSave = Date.now(); }
           } else if (event.type === "message_end") {
             delete history.partial;
             await persist();
             refresh();
-          } else if (event.type === "tool_execution_start") report(`Exa: ${event.toolName}. Keep Finrod open.`, "working");
+          } else if (event.type === "tool_execution_start") report(event.toolName === "web_search_exa" ? "Searching the web…" : "Reading sources…", "working");
         });
-        report("Answering through OpenRouter. Keep Finrod open.", "working");
+        report("Thinking…", "working");
         await agent.prompt(text.trim());
         store.check();
         history.status = interrupted ? "interrupted" : agent.state.errorMessage ? "failed" : "idle";

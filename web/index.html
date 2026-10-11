@@ -3,40 +3,75 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#171717">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://openrouter.ai https://mcp.exa.ai; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>Finrod · phone-local prototype</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://openrouter.ai https://mcp.exa.ai; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Finrod</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23171717'/%3E%3Cpath d='M10 8h14v4H14v4h8v4h-8v6h-4z' fill='%23e8e8e8'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./main.js"></script>
 </head>
 <body>
-  <main>
-    <header>
+  <main class="app">
+    <header class="app-header">
       <h1>Finrod</h1>
-      <p>Phone-local prototype · one conversation</p>
+      <button id="settings-open" class="quiet-button" type="button" aria-haspopup="dialog">Settings</button>
     </header>
-    <details open>
-      <summary>Connect to OpenRouter</summary>
-      <label for="provider-key">Your API key</label>
-      <input id="provider-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Enter a spending-limited key">
-      <p>The key stays only in this open page. Your conversation stays in this browser. OpenRouter and its selected model provider receive the conversation context and may charge for requests.</p>
-      <p>Model: <span id="model"></span>. Direct Exa web search and page retrieval. No Finrod proxy or automatic request retries. Exa receives search queries and requested URLs; keyless access has rate limits.</p>
-    </details>
-    <p class="warning">Experimental: clearing this site's browser data removes its history. Export backups before relying on this history. Backups are not encrypted and must be kept private.</p>
-    <div class="actions">
-      <button id="export" type="button" disabled>Export history</button>
-      <label for="restore">Restore backup <input id="restore" type="file" accept="application/json,.json" disabled></label>
+    <div class="transcript-wrap">
+      <section id="history" aria-label="Conversation" tabindex="0">
+        <div class="conversation-column">
+          <div id="empty"><h2>What’s on your mind?</h2></div>
+          <div id="messages"></div>
+        </div>
+      </section>
+      <button id="latest" class="quiet-button latest" type="button" hidden>Jump to latest</button>
     </div>
-    <p id="status" role="status" aria-live="polite">Opening local history…</p>
-    <section id="history" aria-label="Conversation"></section>
-    <form id="composer">
-      <label for="message">Message</label>
-      <textarea id="message" rows="3" maxlength="20000" placeholder="Talk to Finrod…" disabled></textarea>
-      <div class="actions">
-        <button id="send" type="submit" disabled>Send</button>
-        <button id="stop" type="button" disabled>Stop</button>
-      </div>
-    </form>
+    <footer class="chat-footer">
+      <p id="status" role="status" aria-live="polite" data-state="working">Opening local history…</p>
+      <form id="composer">
+        <label for="message" class="sr-only">Message Finrod</label>
+        <textarea id="message" rows="1" maxlength="20000" placeholder="Message Finrod…" disabled></textarea>
+        <div class="composer-action">
+          <button id="send" class="round-button" type="submit" aria-label="Send message" disabled>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>
+          </button>
+          <button id="stop" class="round-button" type="button" aria-label="Stop answer" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+          </button>
+        </div>
+      </form>
+      <button id="connect" class="connection-hint quiet-button" type="button" hidden>Add your OpenRouter key in Settings to start</button>
+    </footer>
   </main>
+  <dialog id="settings" aria-labelledby="settings-title">
+    <div class="settings-header">
+      <h2 id="settings-title">Settings</h2>
+      <button id="settings-close" class="quiet-button" type="button">Close</button>
+    </div>
+    <form id="settings-form">
+      <section class="settings-section">
+        <label for="provider-key">OpenRouter API key</label>
+        <input id="provider-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Enter a spending-limited key">
+        <p class="muted">Not saved. Enter it again after reloading. Requests go directly to OpenRouter and may incur charges.</p>
+      </section>
+      <section class="settings-section">
+        <h3>History</h3>
+        <p class="muted">Saved in this browser only. Keep an external backup: clearing site data removes your history. Backups are not encrypted.</p>
+        <div class="backup-actions">
+          <button id="export" class="secondary-button" type="button" disabled>Export history</button>
+          <button id="restore-open" class="secondary-button" type="button" disabled>Restore backup</button>
+          <input id="restore" type="file" accept="application/json,.json" hidden disabled>
+        </div>
+      </section>
+      <details class="privacy">
+        <summary>About your data</summary>
+        <p>Model: <span id="model"></span>. OpenRouter and its selected model provider receive your conversation context.</p>
+        <p>Exa receives search queries and requested URLs. Its keyless access has rate limits. There is no Finrod conversation backend or automatic request replay.</p>
+        <p>Your key stays in this open page. Local history is not application-encrypted. Device access and website updates remain trust boundaries.</p>
+      </details>
+      <p id="settings-status" role="status" aria-live="polite" hidden></p>
+      <button id="settings-done" class="primary-button" type="submit">Done</button>
+    </form>
+  </dialog>
 </body>
 </html>
