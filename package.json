@@ -26,6 +26,7 @@
     "@earendil-works/pi-durable": "1.1.0",
     "@earendil-works/pi-mcp": "1.1.0",
     "grammy": "1.46.0",
+    "markdown-it": "15.0.2",
     "pi-mcp-client": "0.12.0"
   },
   "devDependencies": {
