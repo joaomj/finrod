@@ -225,3 +225,6 @@ node_modules/
 *.sqlite
 *.sqlite-*
 .finrod/
+
+# Private source archives and local import outputs
+/data/

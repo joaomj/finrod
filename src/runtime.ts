@@ -12,6 +12,7 @@ import { describeError } from "./errors.js";
 import type { AssistantReply } from "./reply.js";
 import type { Config } from "./config.js";
 import { knowledgeExtension } from "./extensions/knowledge.js";
+import { sourcesExtension } from "./extensions/sources.js";
 import { persona } from "./extensions/persona.js";
 
 export async function openAssistant(config: Config) {
@@ -32,6 +33,8 @@ export async function openAssistant(config: Config) {
   registry.install(persona);
   const knowledge = await knowledgeExtension(join(config.dataDir, "knowledge"));
   registry.install(knowledge);
+  const sources = await sourcesExtension(config.dataDir);
+  registry.install(sources);
   const mcp = await createMcpExtension({
     registry,
     cwd: config.dataDir,
@@ -55,10 +58,9 @@ export async function openAssistant(config: Config) {
       settings: { toolExecution: "sequential", retry: { maxRetries: 2 }, stream: { timeoutMs: 120_000 } },
     }, context);
     await mcp.restore(harness, context);
-    const root = await harness.root(context, {
-      agent: { model: config.model, tools: [...(knowledge.tools ?? []), ...(mcp.extension.tools ?? [])] },
-    });
-    await root.configure({ model: config.model }, context);
+    const tools = [...(knowledge.tools ?? []), ...(sources.tools ?? []), ...(mcp.extension.tools ?? [])];
+    const root = await harness.root(context, { agent: { model: config.model, tools } });
+    await root.configure({ model: config.model, tools }, context);
     harness.resume();
     const opened = harness;
     return {

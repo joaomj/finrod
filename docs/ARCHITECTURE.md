@@ -1,6 +1,7 @@
 # Architecture
 
-This document describes the v0.1.0 single-user architecture. The proposed
+This document describes the single-user architecture, including unreleased imported-source retrieval.
+The v0.1.0 release does not include that retrieval capability. The proposed
 multi-user design is separate in [Roadmap](ROADMAP.md).
 
 Finrod is a single-host personal assistant. Telegram provides the interface;
@@ -23,6 +24,9 @@ flowchart TB
         ledger[("Telegram SQLite ledger")]
         conversation[("Durable SQLite state")]
         knowledge["Markdown topics"]
+        sourceTools["Read-only source tools"]
+        sourceIndex[("ChatGPT SQLite index")]
+        sourceArchive["Unchanged ChatGPT ZIP"]
 
         adapter <-->|"Conversation input / answer"| runtime
         adapter <-->|"Voice / transcript"| voice
@@ -30,6 +34,9 @@ flowchart TB
         runtime <-->|"Conversation and task state"| conversation
         runtime <-->|"Explicit topic operations"| topics
         topics <-->|"Scoped reads and writes"| knowledge
+        runtime <-->|"Historical retrieval"| sourceTools
+        sourceTools -->|"Read only"| sourceIndex
+        sourceArchive -.->|"One-time offline import"| sourceIndex
         runtime <-->|"Allowlisted web tools"| mcp
     end
 
@@ -60,6 +67,7 @@ catalog without starting the bot or making provider requests. See
 | Telegram adapter | Authorize intake, poll updates, deliver replies, accept feedback callbacks | `src/telegram/adapter.ts` |
 | Telegram ledger | Persist inbox, cursor, outbox, bot identity, reply references, and votes | `src/telegram/store.ts` |
 | Assistant instructions | Conversation behavior and explicit-save policy | `src/extensions/persona.ts` |
+| Imported-source retrieval | Search and read the scoped ChatGPT index without mutations | `src/extensions/sources.ts`, `src/sources/chatgpt.ts` |
 | Knowledge extension | List, read, save, correct, and delete scoped Markdown topics | `src/extensions/knowledge.ts` |
 | Voice download | Bound download size and retry interrupted transfers | `src/telegram/voice.ts` |
 | Transcription | Convert voice-note bytes to text through a configured HTTP provider | `src/transcription.ts` |
@@ -88,8 +96,9 @@ The application pins Pi Durable, Pi AI, and Chord at `1.1.0`, and the third-part
 to avoid the OAuth credential-routing vulnerability reported against `2.1.0`.
 Package versions are locked in `package-lock.json`.
 
-The runtime installs the persona, knowledge, and Durable MCP extensions. New
-root conversations receive an explicit baseline tool list. MCP restores
+The runtime installs the persona, knowledge, imported-source, and Durable MCP extensions.
+The runtime configures the explicit baseline tool list on both new and existing root conversations.
+MCP restores
 persisted tool registrations before `harness.resume()`. Runtime code never
 installs Pi's coding tools or supplies a general execution environment.
 
@@ -183,6 +192,36 @@ The instruction to save only on explicit request is model behavior, not a
 semantic authorization engine. File confinement is enforced separately by the
 scoped tool interface. Deleting a page does not erase its earlier content from
 conversation history or backups. There is no QMD index in v0.
+
+### Imported sources
+
+`sources/chatgpt/export.zip` preserves an external ChatGPT export unchanged.
+`sources/chatgpt/index.sqlite` is a derived access structure, not the authoritative archive.
+Finrod keeps source archives and indexes separate from its conversation and Telegram databases.
+It does not use a bronze/silver/gold transformation pipeline.
+
+Offline preparation parses numbered conversation JSON members.
+One-time preparation scripts stay outside the repository.
+The index stores original conversation and message JSON with queryable identifiers, roles, dates, and text.
+SQLite FTS5 indexes text and multimodal text, including transcription text.
+Reasoning records remain stored but are excluded from retrieval.
+No model calls, memory extraction, topic generation, or attachment interpretation occur during import.
+
+The extension exposes `source_search`, `source_conversation`, and `source_message`.
+Reads use short-lived read-only SQLite connections, bounded output, and positional query parameters.
+The model cannot supply filesystem paths or SQL statements.
+Search query syntax is SQLite FTS5 syntax. Invalid syntax reports a tool error.
+Startup rejects symlinked source paths, missing indexes in a source directory, and unsupported index versions.
+An absent import does not prevent normal conversation; search reports that no source is available.
+Restart Finrod after adding an import.
+
+Conversation excerpts follow exported mapping order and include parent node IDs.
+They do not reconstruct branches. Message retrieval paginates text by Unicode character offset.
+Every result identifies its imported conversation and message; assistant suggestions remain distinct from user statements.
+Imported content is untrusted historical evidence, not current instructions or saved personal knowledge.
+Retrieved passages are stored as tool results and sent to the configured model provider.
+Source files are private and read-only by permission, not encrypted or protected from a privileged operator.
+See [Operations](OPERATIONS.md#import-a-chatgpt-archive) for import and deployment steps.
 
 ## External services
 
