@@ -81,6 +81,8 @@ No public HTTP port is required. Keep the machine awake and online.
 - Ask for web research with source links.
 - Send a short voice note; Finrod replies with text.
 - Ask to save a topic, then list and resume your saved topics.
+- After an operator imports a ChatGPT archive, ask Finrod to search your earlier discussions.
+  See [archive import](docs/OPERATIONS.md#import-a-chatgpt-archive). This does not create saved topics.
 - Rate a new assistant reply with either feedback button. You can change your vote.
 - Use `/status` to inspect uncertain reply deliveries.
 

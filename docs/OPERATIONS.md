@@ -183,6 +183,7 @@ keep exported files outside Git. An empty export means no votes are recorded.
 | `conversation.sqlite` and SQLite sidecars | Durable conversation and task state |
 | `telegram.sqlite` and SQLite sidecars | Incoming work, voice transcripts and Telegram file IDs, replies, feedback, bot identity, and cursor |
 | `knowledge/` | Authoritative Markdown topic pages |
+| `sources/chatgpt/` | Unchanged ChatGPT ZIP and a read-only SQLite retrieval index |
 | `mcp/` | MCP adapter state and caches |
 | `process-lock.sqlite` | Single-process ownership lock |
 
@@ -192,6 +193,34 @@ Finrod does not save the audio file locally. The transcript is stored in
 Telegram retains its own audio copy under its policies. Transcripts, replies,
 and saved topics remain in local storage and backups; deleting a topic does not
 erase conversation history.
+
+## Import a ChatGPT archive
+
+Build Finrod on the development computer. Deployment on the VPS is a separate operation.
+Prepare the source directory offline, outside the application checkout. Finrod does not include
+an import framework or a one-time export conversion script.
+
+The prepared directory contains `export.zip` and `index.sqlite`.
+Keep the ZIP unchanged. The index uses schema version 1 and preserves conversation and message JSON,
+identifiers, roles, dates, and parent node IDs. It provides a SQLite FTS5 index for text retrieval.
+The complete archive also preserves settings, feedback, and attachments that the index does not interpret.
+
+Use owner-read-only permissions for both files and private permissions for source directories.
+These permissions prevent ordinary accidental writes; they are not encryption or privileged-user protection.
+Validate database integrity, search-index counts, and the archive checksum before deployment.
+Do not replace a different installed source without a separate retention decision.
+
+For deployment, transfer the complete `sources/chatgpt/` directory into the active data directory.
+Preserve private ownership and permissions, and verify the archive checksum after transfer.
+Deploy the matching application build and restart Finrod to discover the source and enable its tools.
+Copying files alone does not make an older application version able to retrieve them.
+Include `sources/` in the normal data-directory backup.
+
+Finrod can search the archive and retrieve conversation excerpts or paginated message text.
+Search includes text and transcription text. Retrieval excludes reasoning and records without text.
+Attachments remain in the ZIP; these tools do not interpret them.
+The tools do not create topics or add imported messages to the active conversation history.
+Retrieved passages do enter tool results in that history and the configured model provider's context.
 
 ## Backup and VPS migration
 

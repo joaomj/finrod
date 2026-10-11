@@ -103,6 +103,13 @@ Review explicit feedback and answer quality before expanding scope. Prioritize
 changes that improve conversation and saved-topic usefulness. New capabilities
 require a product decision; adding infrastructure is not itself a success metric.
 
+## Imported sources: unreleased
+
+Operator-prepared ChatGPT archives now provide read-only historical retrieval.
+Search and message retrieval succeeded live on the VPS in an existing conversation.
+This capability does not generate saved knowledge or implement autonomous ingestion.
+See [Validation](VALIDATION.md#live-imported-source-checks-2026-10-11) for evidence and limits.
+
 ## Deferred
 
 QMD indexing, automatic memory extraction, autonomous ingestion, background

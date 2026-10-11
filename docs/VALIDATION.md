@@ -67,6 +67,41 @@ spoken name was interpreted without clarification. Inspect the existing Pi
 integration before proposing additional tools. Language hints do not guarantee
 correct names, source claims, or interpretations.
 
+## Local imported-source checks: unreleased
+
+The one-time importer ran against the private ChatGPT export in a local staging data directory.
+The index contains 793 conversations, 13,779 message records, and 9,287 searchable records.
+The copied archive checksum matches the original checksum recorded before import.
+The importer checked database integrity, foreign keys, and search-index integrity and record counts.
+A second invocation recognized the same archive and changed no files.
+
+TypeScript checking and compilation passed. Direct calls to the compiled extension verified user-only
+keyword search, conversation excerpts, and message pagination against stored text.
+Invalid FTS5 syntax propagated as an error. A read-only database connection rejected mutation.
+The database checksum remained unchanged after retrieval. An absent source returned no imported store.
+These were manual local checks, not a new automated regression test.
+
+The local checks did not involve Telegram or a model provider.
+Symlink rejection, unsupported schemas, and interrupted import have not received end-to-end verification.
+The existing full test suites were not run for this change.
+
+## Live imported-source checks: 2026-10-11
+
+The operator transferred the prepared source directory and deployed the updated application on the VPS.
+A request in the existing Telegram conversation invoked `source_search` with a user-role filter.
+The search returned four matches without a tool error. A subsequent `source_message` call returned
+one complete user message with its source identifiers and timestamp.
+
+Read-only inspection of Durable entries confirmed both successful tool results and the final answer.
+The Telegram ledger recorded the answer as sent. The answer quoted the retrieved text and cited
+its conversation and message identifiers. Independent timestamp conversion confirmed the selected date.
+This verifies imported-source discovery and tool availability in an existing conversation after restart.
+
+The service remained active, with no journal errors since deployment at inspection.
+Earlier journal entries showed Telegram polling failures and automatic restarts before deployment.
+The answer reversed the relative order of two retrieved messages. Correct retrieval does not establish
+correct chronology in the model's explanation. Live conversation pagination remains unverified.
+
 ## Automated checks
 
 Run the focused check for the changed area from the project folder:
