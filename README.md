@@ -121,12 +121,14 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 The [roadmap](docs/ROADMAP.md#priority-phone-local-browser-operation) prioritizes running Finrod
 inside an iPhone browser without a personal VPS or a native app.
 A separate [browser prototype](docs/BROWSER.md) builds locally but is not yet verified on an iPhone.
-The released Telegram installation remains the supported path; the prototype has no export or restore yet.
+The prototype uses Pi agent-core, direct Exa MCP research, and local export/restore.
+The [phone PRD](docs/PHONE-PRD.md) defines its scope. The released Telegram installation remains the supported path.
 
 ## Documentation
 
 | Guide | What you will find |
 | --- | --- |
+| [Phone requirements](docs/PHONE-PRD.md) | Independent phone execution, runtime decisions, and acceptance criteria |
 | [Browser prototype](docs/BROWSER.md) | Phone-local scope, build, privacy boundaries, and unverified behavior |
 | [Operations](docs/OPERATIONS.md) | Service setup, feedback export, data retention, backup, and migration |
 | [Architecture](docs/ARCHITECTURE.md) | Pi integration, components, storage, recovery, and provider configuration |

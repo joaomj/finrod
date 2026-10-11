@@ -16,12 +16,15 @@
     "test:install": "python3 test/install.test.py",
     "check:web": "tsc -p web/tsconfig.json",
     "build:web": "npm run check:web && node scripts/build-web.mjs",
-    "web:serve": "node scripts/serve-web.mjs"
+    "web:serve": "node scripts/serve-web.mjs",
+    "test:web": "npm run build:web && node --test test/web.test.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "1.1.0",
+    "@earendil-works/pi-agent-core": "1.1.0",
     "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-durable": "1.1.0",
+    "@earendil-works/pi-mcp": "1.1.0",
     "grammy": "1.46.0",
     "pi-mcp-client": "0.12.0"
   },
@@ -29,6 +32,7 @@
     "@types/node": "22.19.15",
     "@types/sql.js": "1.4.11",
     "esbuild": "0.28.2",
+    "playwright-core": "1.61.1",
     "sql.js": "1.14.2",
     "typescript": "5.9.3"
   },
