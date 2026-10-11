@@ -116,10 +116,18 @@ its center, helping ideas survive beyond a single exchange, and treating trust
 as a responsibility rather than a claim of authority. The literary namesake
 sets an aspiration—not a claim that software possesses his wisdom or virtue.
 
+## Phone-local direction
+
+The [roadmap](docs/ROADMAP.md#priority-phone-local-browser-operation) prioritizes running Finrod
+inside an iPhone browser without a personal VPS or a native app.
+A separate [browser prototype](docs/BROWSER.md) builds locally but is not yet verified on an iPhone.
+The released Telegram installation remains the supported path; the prototype has no export or restore yet.
+
 ## Documentation
 
 | Guide | What you will find |
 | --- | --- |
+| [Browser prototype](docs/BROWSER.md) | Phone-local scope, build, privacy boundaries, and unverified behavior |
 | [Operations](docs/OPERATIONS.md) | Service setup, feedback export, data retention, backup, and migration |
 | [Architecture](docs/ARCHITECTURE.md) | Pi integration, components, storage, recovery, and provider configuration |
 | [Validation](docs/VALIDATION.md) | Completed live checks, automated checks, and remaining gaps |

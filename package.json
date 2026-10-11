@@ -13,7 +13,10 @@
     "start": "node dist/main.js",
     "feedback:export": "node dist/feedback-export.js",
     "test:voice": "npm run build && node --test test/voice.test.mjs",
-    "test:install": "python3 test/install.test.py"
+    "test:install": "python3 test/install.test.py",
+    "check:web": "tsc -p web/tsconfig.json",
+    "build:web": "npm run check:web && node scripts/build-web.mjs",
+    "web:serve": "node scripts/serve-web.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "1.1.0",
@@ -24,6 +27,9 @@
   },
   "devDependencies": {
     "@types/node": "22.19.15",
+    "@types/sql.js": "1.4.11",
+    "esbuild": "0.28.2",
+    "sql.js": "1.14.2",
     "typescript": "5.9.3"
   },
   "overrides": {

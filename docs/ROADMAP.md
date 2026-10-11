@@ -28,6 +28,56 @@ GitHub automation checks and publishes software. It must not require instance
 credentials, SSH access, private conversation data, or automatic deployments to
 operators' servers. Operators decide when and where to install each release.
 
+## Priority: phone-local browser operation
+
+Self-hosting must not assume that every user owns a VPS or manages a server.
+The agreed mobile target is a personal Finrod instance running inside the browser on the user's iPhone.
+This is a product direction, not an implemented capability. It takes priority over expanding server capacity.
+
+The user opens a Finrod URL and can optionally add it to the Home Screen.
+Finrod's conversation logic and retrieval run on the phone. History and imported data remain local by default.
+A website distributes the software; it does not need to run the assistant or store conversations.
+Each user has an independent local instance, even when users download the software from the same website.
+
+### Agreed user outcomes
+
+- **Phone-only setup:** start without another computer, a personal VPS, SSH, or server administration.
+- **No App Store dependency:** use a browser interface, without a new native iOS app or App Store distribution.
+- **Local ownership:** keep conversation history and imported data on the device by default.
+- **External inference:** use the chosen model provider. Local model inference is not a requirement.
+- **Clear disclosure:** explain which provider receives conversation context, how credentials are used, and who pays.
+- **Reliable return:** preserve saved conversations and restore them after closing and reopening Finrod.
+- **Visible interruption:** preserve available progress and report interrupted requests instead of implying completion.
+- **Recoverable data:** provide export and restore so browser-data deletion or device loss need not destroy the only copy.
+- **Foreground operation:** Finrod only needs to work while the user keeps it open. Unattended background work is not required.
+
+In this mode, "my own Finrod" means an independent personal assistant, not a separate Telegram bot account.
+Telegram bot hosting, scheduled jobs, and continuous operation while the phone is locked are outside this initial target.
+The existing server-hosted Telegram mode remains separate.
+
+### Privacy and hosting boundaries
+
+Prefer direct requests from the phone to the chosen model provider.
+Do not introduce a mandatory Finrod backend that processes conversation content.
+Any intermediary that can access content requires explicit disclosure and a separate product decision.
+Backup and synchronization are optional; they must not silently upload local data.
+Explain that external inference is not offline operation and that the model provider receives submitted context.
+
+The software distributor and update channel remain trust boundaries.
+Local data storage alone does not protect against malicious client code or a compromised device.
+Do not promise that every administrator is unable to read content without a defined and verified threat model.
+
+### Feasibility and acceptance
+
+Verify the agreed foreground experience on an actual iPhone before selecting implementation technology.
+Assess phone-local execution, storage, provider access, credentials, and recovery without requiring background operation.
+Report blockers rather than silently replacing local execution with a remote assistant.
+
+**Gate:** a user completes setup from an iPhone, exchanges messages with an external model,
+closes and reopens Finrod with saved history intact, and exports and restores their data.
+Interrupted work has a visible outcome. Record where execution and data actually reside.
+A desktop-only setup followed by a Telegram message on an iPhone does not satisfy this target.
+
 ## v0.1.0: one user per bot instance
 
 The first release preserves the architecture proven locally and on the VPS:
@@ -52,6 +102,7 @@ is not implicit in membership and is outside this initial multi-user scope.
 of simultaneous model calls. Define the admitted-user count, active concurrency,
 message sizes, latency budget, and cost limits before the capacity acceptance run.
 Measure a single-host design before introducing distributed infrastructure.
+The mobile-first deployment priority above is separate from this shared-bot capacity target.
 
 ### Proposed logical architecture
 
@@ -170,6 +221,7 @@ Logs and audit records must not become another unprotected conversation archive.
 
 ### 1. Approve the privacy and access contract
 
+Validate the phone-local foreground experience above before selecting new deployment technology.
 Decide admission policy, threat model, key custody and recovery, operator access,
 retention/deletion semantics, and the initial capacity workload. Keep these
 choices explicit rather than presenting candidate encryption as an implemented
