@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://openrouter.ai; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' https://openrouter.ai https://mcp.exa.ai; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Finrod · phone-local prototype</title>
   <link rel="stylesheet" href="./style.css">
   <script type="module" src="./main.js"></script>
@@ -20,9 +20,13 @@
       <label for="provider-key">Your API key</label>
       <input id="provider-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Enter a spending-limited key">
       <p>The key stays only in this open page. Your conversation stays in this browser. OpenRouter and its selected model provider receive the conversation context and may charge for requests.</p>
-      <p>Model: <span id="model"></span>. No Finrod proxy, tools, or automatic retries.</p>
+      <p>Model: <span id="model"></span>. Direct Exa web search and page retrieval. No Finrod proxy or automatic request retries. Exa receives search queries and requested URLs; keyless access has rate limits.</p>
     </details>
-    <p class="warning">Experimental: clearing this site's browser data removes its history. Export and restore are not implemented yet. Do not use this as your only copy of important information.</p>
+    <p class="warning">Experimental: clearing this site's browser data removes its history. Export backups before relying on this history. Backups are not encrypted and must be kept private.</p>
+    <div class="actions">
+      <button id="export" type="button" disabled>Export history</button>
+      <label for="restore">Restore backup <input id="restore" type="file" accept="application/json,.json" disabled></label>
+    </div>
     <p id="status" role="status" aria-live="polite">Opening local history…</p>
     <section id="history" aria-label="Conversation"></section>
     <form id="composer">

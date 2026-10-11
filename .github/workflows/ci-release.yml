@@ -35,6 +35,10 @@ jobs:
         run: npm ci --ignore-scripts --include=dev --no-audit --no-fund
       - name: Check types and build
         run: npm run check && npm run build
+      - name: Install browser for phone integration checks
+        run: npx playwright-core install --with-deps chromium
+      - name: Verify phone browser behavior
+        run: npm run test:web
       - name: Run application integration tests
         run: node --test test/telegram.test.mjs test/knowledge.test.mjs test/voice.test.mjs
       - name: Check installer syntax and shell safety
