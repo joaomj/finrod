@@ -3,6 +3,13 @@
 This file records user-facing changes. See the versioned release notes for
 verification evidence and known limits.
 
+## Unreleased
+
+### Added
+
+- Automatic Cloudflare Pages deployment for published, checked stable releases.
+- Exact release-commit selection and verification of every hosted static asset.
+
 ## [0.2.0] - 2026-10-12
 
 ### Added

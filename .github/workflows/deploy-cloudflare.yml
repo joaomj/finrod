@@ -1,0 +1,91 @@
+name: Deploy published release to Cloudflare
+
+on:
+  workflow_run:
+    workflows: [CI and release]
+    types: [completed]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published release to deploy; only the latest stable release is eligible
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: finrod-cloudflare-production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy:
+    name: Deploy and verify published release
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v') &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out deployment controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: automation
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Verify published release and successful gates
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node automation/scripts/release-deployment.mjs
+      - name: Validate Cloudflare credentials
+        if: steps.release.outputs.deploy == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          [[ -n "$CLOUDFLARE_API_TOKEN" ]] || { printf '%s\n' 'Missing CLOUDFLARE_API_TOKEN; configure a Pages Edit repository secret.' >&2; exit 1; }
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" ]] || { printf '%s\n' 'CLOUDFLARE_ACCOUNT_ID: configure the Pages account repository secret.' >&2; exit 1; }
+      - name: Check out the exact published commit
+        if: steps.release.outputs.deploy == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          path: release
+          persist-credentials: false
+      - name: Build locked release assets
+        if: steps.release.outputs.deploy == 'true'
+        working-directory: release
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          node --input-type=module -e 'import {readFileSync} from "node:fs"; const pkg=JSON.parse(readFileSync("package.json")); const lock=JSON.parse(readFileSync("package-lock.json")); if (`v${pkg.version}`!==process.env.RELEASE_TAG || pkg.version!==lock.version || pkg.version!==lock.packages[""].version) throw new Error("Release package, lockfile, and tag versions differ.");'
+          npm ci --ignore-scripts --include=dev --no-audit --no-fund
+          npm run build
+      - name: Upload to the existing production origin
+        if: steps.release.outputs.deploy == 'true'
+        working-directory: release
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: npx --yes wrangler@4.149.0 pages deploy web-dist --project-name finrod-preview --branch master --commit-hash "$RELEASE_SHA" --commit-message "Finrod $RELEASE_TAG" --commit-dirty=false
+      - name: Verify the stable HTTPS origin
+        if: steps.release.outputs.deploy == 'true'
+        run: node automation/scripts/verify-web-deployment.mjs release/web-dist https://finrod-preview.pages.dev/
