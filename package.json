@@ -7,17 +7,10 @@
     "node": ">=22.22.1"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npm run check && node scripts/build-web.mjs",
     "check": "tsc --noEmit",
-    "test:telegram": "npm run build && node --test test/telegram.test.mjs",
-    "start": "node dist/main.js",
-    "feedback:export": "node dist/feedback-export.js",
-    "test:voice": "npm run build && node --test test/voice.test.mjs",
-    "test:install": "python3 test/install.test.py",
-    "check:web": "tsc -p web/tsconfig.json",
-    "build:web": "npm run check:web && node scripts/build-web.mjs",
-    "web:serve": "node scripts/serve-web.mjs",
-    "test:web": "npm run build:web && node --test test/web.test.mjs"
+    "test": "npm run build && node --test test/web.test.mjs",
+    "web:serve": "node scripts/serve-web.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "1.1.0",
@@ -25,9 +18,7 @@
     "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-durable": "1.1.0",
     "@earendil-works/pi-mcp": "1.1.0",
-    "grammy": "1.46.0",
-    "markdown-it": "15.0.2",
-    "pi-mcp-client": "0.12.0"
+    "markdown-it": "15.0.2"
   },
   "devDependencies": {
     "@types/node": "22.19.15",
@@ -36,8 +27,5 @@
     "playwright-core": "1.61.1",
     "sql.js": "1.14.2",
     "typescript": "5.9.3"
-  },
-  "overrides": {
-    "@modelcontextprotocol/client": "2.2.0"
   }
 }

@@ -1,9 +1,10 @@
-# Phone-local browser prototype
+# Browser chat
 
-**Status:** unreleased agent-core prototype. Desktop Brave checks pass, including
-live OpenRouter inference and Exa research. Actual phone acceptance remains open.
-The existing VPS and Telegram mode is unchanged.
-See [Phone PRD](PHONE-PRD.md) for the approved requirements.
+**Status:** browser implementation with partial phone verification. The static
+preview at **https://finrod-preview.pages.dev** includes personal Exa-key support.
+The user reports successful iPhone/Brave conversations, reopening, personal-key
+research, and saved-key restoration. Full phone acceptance remains open.
+See [Product requirements](PRD.md) for scope and [Validation](VALIDATION.md) for evidence.
 
 ## Intended experience
 
@@ -92,8 +93,8 @@ History persists in this browser on this device. Different browsers, devices,
 and website origins have independent histories; there is no automatic sync.
 Finrod interrupts active work when the page becomes hidden. On reopening,
 unfinished work is marked interrupted, not automatically replayed.
-The prototype has no background service, Telegram connection, voice, source
-import, codemode, or dynamic tool-search interface.
+Finrod has no conversation backend, voice, source import, codemode, or dynamic
+tool-search interface. It does not run unattended background work.
 
 ## Build and preview
 
@@ -101,7 +102,7 @@ Use the project's supported Node version and locked development dependencies.
 From the checkout, run:
 
 ```sh
-npm run build:web
+npm run build
 npm run web:serve
 ```
 
@@ -109,8 +110,7 @@ Open `http://127.0.0.1:4173` in a normal Brave window on the development compute
 Use the same address on return: `localhost` and `127.0.0.1` have separate storage.
 Avoid private browsing for history you intend to keep.
 The development server listens on loopback and serves only `web-dist/`.
-It does not load Finrod's environment file, proxy requests, or start Telegram.
-The browser build does not change the server application's `dist/` output.
+It does not load provider credentials or proxy requests.
 
 For phone access, serve the complete `web-dist/` directory through HTTPS on a
 host reachable from the phone. The phone's loopback address refers to the phone,
@@ -147,7 +147,7 @@ Only this migration loads the old Durable/sql.js code and SQLite WebAssembly.
 The original snapshot remains untouched in IndexedDB as a recovery copy.
 Normal agent execution does not use Durable, Chord, or SQLite.
 Migration supports the original single-conversation prototype, not arbitrary
-server databases or multi-conversation archives.
+other databases or multi-conversation archives.
 
 Interrupted tool calls receive explicit failed results when history is recovered.
 This preserves usable model context without repeating the external operation.
@@ -156,7 +156,7 @@ Cancellation cannot guarantee that a provider stops processing or cancels charge
 The native Pi MCP `1.1.0` browser build excludes Node-only stdio exports and uses
 `TextEncoder` for HTTP stream byte counting. This is a build adaptation, not a
 new MCP client. The build fails if the pinned parser no longer matches the
-expected adaptation. The server's third-party MCP adapter remains unchanged.
+expected adaptation.
 
 ## Export and restore
 
@@ -180,66 +180,29 @@ website distributor, and the update channel remain trust boundaries.
 Clearing site data, device loss, or browser storage eviction can remove history,
 including the retained migration snapshot. Keep an external backup.
 
+## Feedback
+
+Rate a saved assistant answer with **Good answer** or **Bad answer**. A negative
+vote opens an optional comment field. Select **Send feedback** to save the vote.
+Feedback stays in the local chat library and all-chat backup. Finrod does not
+send feedback to the model or change its behavior automatically.
+
 ## Verification
 
-`npm run test:web` builds the browser application and runs three focused browser
-scenarios with controlled provider responses. They cover:
-
-- Migration from a database written by the real Durable storage implementation,
-  research, context isolation, sequential IDs, delayed titles across chat switches,
-  reopening, the single-page lock, all-chat export/restore, and saved-key removal.
-- Interrupted tool recovery, absence of automatic replay, and valid next-turn context.
-- Storage failure before paid work, conversation and title failures, absence of
-  title retries, and credential redaction.
+`npm test` builds the application and runs three controlled browser scenarios.
+They cover migration, research, chat isolation, titles, reopening, export/restore,
+writer locking, interruption recovery, storage failures, and credential handling.
+The checks make no live model or research requests by default.
 
 The checks use desktop Brave when `/usr/bin/brave-browser` exists, or Playwright's
 installed Chromium otherwise. Set `FINROD_TEST_BROWSER` to select another Chromium
 executable. Install Chromium with `npx playwright-core install chromium` when
-neither browser is available. CI installs Chromium and runs the controlled checks.
+neither browser is available. CI installs Chromium for the same checks.
 
 Optional live checks are disabled by default:
 
-- `FINROD_TEST_LIVE_EXA=1`: real keyless Exa search and page retrieval from the browser with controlled inference.
+- `FINROD_TEST_LIVE_EXA=1`: real keyless Exa search and page retrieval with controlled inference.
 - `FINROD_TEST_LIVE_MODEL=1`: real Haiku inference and Exa research; requires `OPENROUTER_API_KEY` and incurs provider charges.
 
-Passed locally: server typechecking, browser typechecking/bundling, all three
-controlled scenarios, and both live browser checks. The live model completed a
-research turn and cited a source. A provider-error credential leak found during
-verification was repaired and its regression check passes.
-
-The multi-chat interface passes the same three controlled scenarios. No new test
-cases were added. A separate desktop Brave walkthrough checked desktop and
-phone-sized layouts, Markdown, safe links, image suppression, and scroll
-navigation. Reduced viewport height was checked without a real phone keyboard.
-An isolated previous-version database preserved all 22 conversation records and
-its original recovery copy during migration. A phone-sized sidebar walkthrough
-and persistent-profile restarts confirmed saved-key restoration and removal.
-Brave restored duplicate tabs during one restart; closing the extra isolated tab
-released the expected single-writer conflict. These checks made no live model or
-tool calls. Live checks above describe the earlier runtime verification, not a
-live title-generation check.
-
-The Exa-key and rate-limit changes pass browser typechecking/bundling and the
-same three controlled scenarios, extended at the browser boundary. The checks
-verify key save/reopen/removal, independent model and research keys, header
-rather than URL authentication, credential exclusion from model requests and
-backups, and visible keyed connection failures without fallback to free access.
-An upstream credential echo is redacted before the next model request.
-
-The rate-limit regression fails on the pre-fix browser code for the intended
-reason: ordinary Exa rate-limit text appears as successful research. It passes
-on the fixed code. The checks also verify a saved failed-tool flag and correct
-presentation of an older result without rewriting history. No additional test
-cases or production test seams were added. This run made no live inference or
-research requests.
-
-An Exa preflight from the preview origin permits the `x-api-key` header. This
-establishes browser transport permission, not successful live authentication.
-Live research with a personal Exa key and actual-phone behavior of these changes
-remain unverified. The deployed preview still uses the earlier build.
-
-Still unverified for release acceptance: the complete iPhone flow, the second
-user's Chrome phone session, phone-only setup, abrupt device termination, and
-large-history performance.
-The full server/installer suites and remote CI were not run for this change.
-Desktop evidence does not close the phone release gate in [Phone PRD](PHONE-PRD.md).
+Enable live checks only with approval for external requests and charges.
+See [Validation](VALIDATION.md) for completed checks and phone acceptance gaps.
