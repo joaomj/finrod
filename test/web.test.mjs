@@ -13,6 +13,8 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 
 let server, browser, origin;
 const sessionKey = "sk-or-browser-fixture";
+const exaKey = "exa-browser-fixture-key";
+const replacementExaKey = "exa-replacement-fixture-key";
 const contentType = { ".js": "text/javascript", ".html": "text/html", ".css": "text/css", ".wasm": "application/wasm" };
 before(async () => {
   server = createServer(async (request, response) => {
@@ -60,7 +62,12 @@ async function preview(t, { legacy, liveExa = false, liveModel = false, titleGat
   const errors = [];
   page.on("pageerror", error => errors.push(error.message));
   t.after(() => assert.deepEqual(errors, [], "No uncaught browser errors"));
-  const modelRequests = [], toolCalls = [];
+  const modelRequests = [], toolCalls = [], mcpRequests = [];
+  page.on("request", request => {
+    if (request.url().startsWith("https://mcp.exa.ai/") && request.method() === "POST") {
+      mcpRequests.push({ url: request.url(), headers: request.headers(), body: request.postDataJSON() });
+    }
+  });
   if (!liveExa) await page.route("https://mcp.exa.ai/**", async route => {
     const request = route.request();
     if (request.method() !== "POST") { await route.fulfill({ status: 405 }); return; }
@@ -71,7 +78,7 @@ async function preview(t, { legacy, liveExa = false, liveModel = false, titleGat
       { name: "web_search_exa", description: "Search the web", inputSchema: { type: "object", properties: { query: { type: "string" }, objective: { type: "string" }, numResults: { type: "number" } }, required: ["query", "objective"] } },
       { name: "web_fetch_exa", description: "Read a page", inputSchema: { type: "object", properties: { urls: { type: "array", items: { type: "string" } } }, required: ["urls"] } },
     ] };
-    else if (body.method === "tools/call") { toolCalls.push(body.params); result = { content: [{ type: "text", text: "São Paulo won 2–1. Source: https://example.org/match" }] }; }
+    else if (body.method === "tools/call") { toolCalls.push(body.params); result = { content: [{ type: "text", text: "São Paulo won 2–1. Source: https://example.org/match" + (request.headers()["x-api-key"] ? `\nUpstream credential echo: ${request.headers()["x-api-key"]}` : "") }] }; }
     else { await route.fulfill({ status: 202 }); return; }
     // Use SSE and non-ASCII data to exercise the native client's browser HTTP parser.
     await route.fulfill({ status: 200, contentType: "text/event-stream", body: `data: ${JSON.stringify({ jsonrpc: "2.0", id: body.id, result })}\n\n` });
@@ -112,7 +119,7 @@ async function preview(t, { legacy, liveExa = false, liveModel = false, titleGat
   }
   await page.goto(origin);
   await page.waitForFunction(() => !document.querySelector("#message").disabled);
-  return { page, context, modelRequests, toolCalls };
+  return { page, context, modelRequests, toolCalls, mcpRequests };
 }
 const activeHistory = backup => backup.sessions.find(session => session.session_id === backup.active_session_id).history;
 
@@ -142,7 +149,10 @@ test("phone user migrates old history, researches, reopens, and exports/restores
   let releaseTitle;
   const titleGate = new Promise(resolve => { releaseTitle = resolve; });
   t.after(() => releaseTitle());
-  const { page, context, modelRequests, toolCalls } = await preview(t, { legacy: await legacySnapshot(), titleGate });
+  const { page, context, modelRequests, toolCalls, mcpRequests } = await preview(t, { legacy: await legacySnapshot(), titleGate });
+  await openSettings(page);
+  await page.locator("#exa-key").fill(exaKey);
+  await page.locator("#settings-done").click();
   assert.match(await page.locator("#history").innerText(), /migration word is cedar/);
   assert.match(await page.locator("#status").innerText(), /migrated safely/);
   await send(page); await finished(page);
@@ -157,8 +167,14 @@ test("phone user migrates old history, researches, reopens, and exports/restores
   const exported = await backup(page);
   assert.equal(activeHistory(exported).status, "idle");
   assert(!JSON.stringify(exported).includes(sessionKey));
+  assert(!JSON.stringify(exported).includes(exaKey), "Saved research credentials must not enter backups");
+  assert(mcpRequests.length > 0);
+  assert(mcpRequests.every(request => request.headers["x-api-key"] === exaKey), "Every research request must authenticate with the saved key");
+  assert(mcpRequests.every(request => !request.url.includes(exaKey)), "Research credentials must not enter URLs");
+  assert(!JSON.stringify(modelRequests).includes(exaKey), "The model must not receive the research credential");
   await page.reload(); await page.waitForFunction(() => !document.querySelector("#message").disabled);
   assert.equal(await page.locator("#provider-key").inputValue(), sessionKey);
+  assert.equal(await page.locator("#exa-key").inputValue(), exaKey);
   assert.match(await page.locator("#history").innerText(), /São Paulo won 2–1/);
   assert.equal(modelRequests.length, 3, "Reopening must not issue another paid request");
   const second = await context.newPage(); await second.goto(origin);
@@ -179,6 +195,7 @@ test("phone user migrates old history, researches, reopens, and exports/restores
   await page.reload(); await page.waitForFunction(() => !document.querySelector("#message").disabled);
   assert.equal(await page.locator("#provider-key").inputValue(), "");
   assert.deepEqual(await backup(page), exported, "Forgetting the key must not alter history");
+  assert.equal(await page.locator("#exa-key").inputValue(), exaKey, "Forgetting the model key must not remove the research key");
   await page.locator("#new-chat").click();
   await send(page, "What was São Paulo's latest score?"); await finished(page);
   assert(!modelRequests[3].messages.some(message => JSON.stringify(message).includes("cedar")), "A new chat must not send another chat's context");
@@ -202,12 +219,24 @@ test("phone user migrates old history, researches, reopens, and exports/restores
   assert.equal(allChats.sessions[2].history.messages.length, 0);
   assert(!JSON.stringify(allChats.sessions[1].history.messages).includes("cedar"));
   await openSettings(page);
+  await page.locator("#exa-key").fill(replacementExaKey);
+  await page.locator("#settings-done").click();
+  await openSettings(page);
   await page.locator("#restore").setInputFiles({ name: "all-chats.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(allChats)) });
   await page.waitForFunction(() => document.querySelector("#status").textContent.includes("History restored"));
   assert.deepEqual(await backup(page), allChats);
+  assert.equal(await page.locator("#exa-key").inputValue(), replacementExaKey, "Restoring history must preserve the current research key");
   await page.reload(); await page.waitForFunction(() => !document.querySelector("#message").disabled);
   assert.equal(modelRequests.length, 7, "Reopening must not replay chat or title requests");
   assert.deepEqual(await backup(page), allChats);
+  assert.equal(await page.locator("#exa-key").inputValue(), replacementExaKey);
+  await openSettings(page);
+  await page.locator("#forget-exa-key").click();
+  await page.locator("#settings-done").click();
+  await page.reload(); await page.waitForFunction(() => !document.querySelector("#message").disabled);
+  assert.equal(await page.locator("#exa-key").inputValue(), "");
+  assert.equal(await page.locator("#provider-key").inputValue(), sessionKey, "Forgetting the research key must not remove the model key");
+  assert.deepEqual(await backup(page), allChats, "Forgetting the research key must not alter history");
 });
 
 test("interrupted tool work reopens as failed, is not replayed, and supplies valid context on the next turn", { timeout: 20_000 }, async t => {
@@ -250,8 +279,8 @@ test("interrupted tool work reopens as failed, is not replayed, and supplies val
   assert(transcript.some(message => message.role === "tool" && message.tool_call_id === "call-search"));
 });
 
-test("storage failure blocks paid work; provider failure is visible and credentials stay out of backups", { timeout: 20_000 }, async t => {
-  const { page, modelRequests } = await preview(t);
+test("storage failure blocks paid work; provider failure is visible and credentials stay out of backups", { timeout: 30_000 }, async t => {
+  const { page, modelRequests, mcpRequests } = await preview(t);
   await page.evaluate(() => {
     IDBObjectStore.prototype.put = function () { throw new DOMException("Storage full", "QuotaExceededError"); };
   });
@@ -285,6 +314,68 @@ test("storage failure blocks paid work; provider failure is visible and credenti
   assert.equal(activeHistory(unnamed).messages.at(-1).content[0].text, "Ready.", "A title failure must not replace the conversation reply");
   await page.reload(); await page.waitForFunction(() => !document.querySelector("#message").disabled);
   assert.equal(modelRequests.length, 2, "A failed title must not retry on reopening");
+
+  const rateLimit = "You've hit Exa's free MCP rate limit. Add your own Exa API key to continue.";
+  await page.route("https://mcp.exa.ai/**", async route => {
+    const body = route.request().postDataJSON();
+    if (body?.method !== "tools/call") { await route.fallback(); return; }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: body.id,
+      result: { content: [{ type: "text", text: rateLimit }] } }) });
+  });
+  await page.route("https://openrouter.ai/**", async route => {
+    const body = route.request().postDataJSON();
+    modelRequests.push(body);
+    const result = body.messages.find(message => message.role === "tool" && message.tool_call_id === "rate-search");
+    const stream = result ? textStream("Search is unavailable; I cannot verify this question.") : 'data: ' + JSON.stringify({ id: "rate-limit", choices: [{ index: 0,
+      delta: { role: "assistant", tool_calls: [{ index: 0, id: "rate-search", type: "function", function: { name: "web_search_exa",
+        arguments: JSON.stringify({ query: "recent news", objective: "Verify the user's question.", numResults: 1 }) } }] }, finish_reason: "tool_calls" }] }) + '\n\ndata: [DONE]\n\n';
+    await route.fulfill({ status: 200, contentType: "text/event-stream", body: stream });
+  });
+  await send(page, "Please research this question."); await finished(page);
+  assert.match(await page.locator(".activity summary").last().innerText(), /incomplete/, "A plain-text rate limit must not appear as successful research");
+  assert(mcpRequests.every(request => !request.headers["x-api-key"]), "Blank research credentials must use keyless requests");
+  await page.locator(".activity").last().locator("summary").click();
+  assert.match(await page.locator(".activity").last().innerText(), /Search failed/);
+  const limited = await backup(page);
+  const failedSearch = activeHistory(limited).messages.find(message => message.role === "toolResult" && message.toolCallId === "rate-search");
+  assert.equal(failedSearch.isError, true, "The saved result must record the failed search");
+  assert.match(failedSearch.content[0].text, /free MCP rate limit/);
+  const nextRequest = modelRequests.find(body => body.messages.some(message => message.role === "tool" && message.tool_call_id === "rate-search"));
+  assert.match(JSON.stringify(nextRequest.messages), /free MCP rate limit/, "The answer must receive the actual research failure");
+
+  const historical = structuredClone(limited);
+  const historicalResult = activeHistory(historical).messages.find(message => message.role === "toolResult" && message.toolCallId === "rate-search");
+  historicalResult.isError = false;
+  historicalResult.content = [{ type: "text", text: rateLimit }];
+  await openSettings(page);
+  page.once("dialog", dialog => dialog.accept());
+  await page.locator("#restore").setInputFiles({ name: "old-rate-limit.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(historical)) });
+  await page.waitForFunction(() => document.querySelector("#status").textContent.includes("History restored"));
+  assert.match(await page.locator(".activity summary").last().innerText(), /incomplete/);
+  assert.deepEqual(await backup(page), historical, "Presenting an old rate limit must not rewrite saved history");
+
+  await openSettings(page);
+  await page.locator("#exa-key").fill(exaKey);
+  await page.locator("#settings-done").click();
+  const paidBefore = modelRequests.length;
+  const researchBefore = mcpRequests.length;
+  await page.route("https://mcp.exa.ai/**", async route => {
+    const body = route.request().postDataJSON();
+    if (body?.method !== "tools/list") { await route.fallback(); return; }
+    await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: `Rejected research key ${exaKey}; other credential ${sessionKey}` }) });
+  });
+  await send(page, "Try research with my key.");
+  await page.waitForFunction(() => document.querySelector("#stop").hidden && document.querySelector("#status").dataset.state === "error");
+  const shownError = await page.locator("#status").innerText();
+  assert.match(shownError, /Cannot connect directly to Exa/);
+  assert(!shownError.includes(exaKey) && !shownError.includes(sessionKey));
+  assert.equal(modelRequests.length, paidBefore, "Research connection failure must not start paid inference");
+  assert(mcpRequests.length > researchBefore);
+  assert(mcpRequests.slice(researchBefore).every(request => request.headers["x-api-key"] === exaKey), "A rejected key must not fall back to free access");
+  assert.equal(await page.locator("#exa-key").inputValue(), exaKey);
+  const rejected = await backup(page);
+  assert(!JSON.stringify(rejected).includes(exaKey) && !JSON.stringify(rejected).includes(sessionKey));
+  assert(!JSON.stringify(modelRequests).includes(exaKey));
 });
 
 test("native MCP searches and retrieves Exa pages directly from Brave", { skip: !process.env.FINROD_TEST_LIVE_EXA, timeout: 25_000 }, async t => {

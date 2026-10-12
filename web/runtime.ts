@@ -2,7 +2,8 @@ import { Agent } from "@earendil-works/pi-agent-core";
 import { recoverHistory, type SavedMessage } from "./history.js";
 import { openHistory } from "./storage.js";
 import { rateable, type Feedback, type Vote } from "./feedback.js";
-import { openExa } from "./mcp.js";
+import { openExa, exaToolFailure } from "./mcp.js";
+import { redact } from "./redaction.js";
 import { openBrowserModel } from "./model.js";
 import { generateTitle } from "./titles.js";
 import { parseLibrary, recoverLibrary, type SessionList } from "./sessions.js";
@@ -12,8 +13,11 @@ export type ChatMessage = { message_index: number; rateable: boolean; feedback?:
 function displayed(message: SavedMessage, index: number, feedback?: Feedback, partial = false): ChatMessage[] {
   const identity = { message_index: index, rateable: !partial && rateable(message), ...(feedback ? { feedback } : {}) };
   if (message.role === "user") return [{ ...identity, role: "user", text: typeof message.content === "string" ? message.content : message.content.map(block => block.type === "text" ? block.text : "").join("\n"), partial }];
-  if (message.role === "toolResult") return [{ ...identity, role: "tool", text: `${message.toolName}: ${message.isError ? "failed or interrupted" : "completed"}`, partial: false, toolName: message.toolName,
-    ...(message.isError ? { error: message.content.map(block => block.type === "text" ? block.text : "").join("\n") } : {}) }];
+  if (message.role === "toolResult") {
+    const error = exaToolFailure(message.toolName, message.content.map(block => block.type === "text" ? block.text : "").join("\n"), message.isError);
+    return [{ ...identity, role: "tool", text: `${message.toolName}: ${error ? "failed or interrupted" : "completed"}`, partial: false, toolName: message.toolName,
+      ...(error ? { error } : {}) }];
+  }
   const text = message.content.filter(block => block.type === "text").map(block => block.text).join("\n");
   const error = message.stopReason === "error" || message.stopReason === "aborted" ? message.errorMessage ?? "Answer interrupted or failed; it is incomplete." : undefined;
   return text || error ? [{ ...identity, role: "assistant", text, partial, ...(error ? { error } : {}) }] : [];
@@ -30,15 +34,13 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
   let agent: Agent | undefined;
   let operation: AbortController | undefined;
   let interrupted = false;
-  let key = "";
-  const safeError = (error: unknown) => {
-    const text = error instanceof Error ? error.message : String(error);
-    return key ? text.split(key).join("[redacted]") : text;
-  };
-  const refresh = () => render([...history.messages.flatMap((message, index) => displayed(message, index, current.feedback.find(entry => entry.message_index === index))), ...(history.partial ? displayed(history.partial, history.messages.length, undefined, true) : [])]);
+  let keys: string[] = [];
+  const safeError = (error: unknown) => redact(error instanceof Error ? error.message : String(error), keys);
+  const refresh = () => render([...history.messages.flatMap((message, index) => displayed(message, index, current.feedback.find(entry => entry.message_index === index))), ...(history.partial ? displayed(history.partial, history.messages.length, undefined, true) : [])]
+    .map(message => ({ ...message, text: redact(message.text, keys), ...(message.error ? { error: redact(message.error, keys) } : {}) })));
   const persist = async (replace = false) => {
-    // Provider error strings must not copy the credential into history or backups.
-    if (key) history = JSON.parse(JSON.stringify(history, (_name, value) => typeof value === "string" ? value.split(key).join("[redacted]") : value));
+    // External responses must not copy configured credentials into history or backups.
+    if (keys.some(Boolean)) history = JSON.parse(JSON.stringify(history, (_name, value) => typeof value === "string" ? redact(value, keys) : value));
     try { await store.save(current.session_id, history, replace); refreshSessions(); }
     catch (error) { agent?.abort(); operation?.abort(); throw error; }
   };
@@ -56,20 +58,20 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
     get interrupted() { return history.status === "interrupted"; },
     get failed() { return history.status === "failed"; },
     migrated: store.migrated,
-    async send(text: string, apiKey: string) {
+    async send(text: string, apiKey: string, exaApiKey: string) {
       store.check();
       if (operation) throw new Error("Finrod is already answering.");
       if (!apiKey.trim()) throw new Error("Add your own OpenRouter API key in Settings.");
       if (!text.trim() || text.length > 20_000) throw new Error("Enter a message of at most 20,000 characters.");
       if (document.visibilityState === "hidden") throw new Error("Keep Finrod visible while sending a message.");
-      key = apiKey.trim();
+      keys = [apiKey.trim(), exaApiKey.trim()];
       operation = new AbortController();
       interrupted = false;
       let exa: Awaited<ReturnType<typeof openExa>> | undefined;
       try {
         const { models, model } = openBrowserModel(apiKey);
         report("Connecting…", "working");
-        exa = await openExa(operation.signal);
+        exa = await openExa(operation.signal, exaApiKey);
         if (operation.signal.aborted || document.hidden) throw new Error("Request interrupted before it started.");
         history.status = "pending";
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -115,8 +117,8 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
       } finally {
         operation = undefined;
         agent = undefined;
-        key = "";
-        if (exa) await exa.close();
+        try { if (exa) await exa.close(); }
+        finally { keys = []; }
       }
     },
     async interrupt() {
@@ -128,9 +130,9 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
       history.status = "interrupted";
       await persist();
     },
-    async saveFeedback(index: number, vote: Vote, comment: string, apiKey: string) {
+    async saveFeedback(index: number, vote: Vote, comment: string, credentials: readonly string[]) {
       const id = current.session_id;
-      const safeComment = apiKey ? comment.split(apiKey).join("[redacted]") : comment;
+      const safeComment = redact(comment, credentials);
       await store.saveFeedback(id, index, vote, safeComment);
       refreshSessions();
       refresh();
@@ -161,7 +163,8 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
       await store.select(id);
       activate();
     },
-    requestTitle(apiKey: string) {
+    requestTitle(apiKey: string, exaApiKey: string) {
+      const credentials = [apiKey, exaApiKey];
       const id = current.session_id;
       if (current.titleState !== "unrequested" || titles.has(id)) return;
       const copy = structuredClone(history);
@@ -174,9 +177,9 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
         try {
           title = await generateTitle(copy, apiKey, controller.signal);
           controller.signal.throwIfAborted();
-          title = title.split(apiKey).join("[redacted]").slice(0, 80);
+          title = redact(title, credentials).slice(0, 80);
         } catch (cause) {
-          error = (cause instanceof Error ? cause.message : String(cause)).split(apiKey).join("[redacted]");
+          error = redact(cause instanceof Error ? cause.message : String(cause), credentials);
           if (controller.signal.aborted) error = "Title generation was interrupted. It was not automatically retried.";
         }
         await store.setTitle(id, error ? "New chat" : title, error ? "failed" : "done", error);

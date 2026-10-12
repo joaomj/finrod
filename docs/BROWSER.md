@@ -67,10 +67,26 @@ OpenRouter and its selected inference provider receive submitted conversation
 context. Exa receives search queries and requested URLs. Their charges, retention
 policies, rate limits, and availability are separate from local storage.
 
-The current Exa connection uses keyless, rate-limited access. It connects and
-loads the two tool schemas before each conversation turn. If that connection
+The Exa connection uses free, rate-limited access when no personal Exa key is saved.
+In Settings, enter an optional Exa API key and select Done. The same Exa API key
+also authenticates the hosted MCP service. Requests send it in an `x-api-key`
+header, not in a URL. Keyed requests use the user's Exa account and can incur charges.
+Select **Forget Exa key** to return to free access without changing history.
+The Exa key is saved in localStorage under `finrod.exa-key`, separately from
+conversation storage and the model key. History export and restore do not
+include or replace either saved key. Both keys are readable by this browser's
+application code and are not application-encrypted.
+
+The adapter reports Exa's known free-access limit as a failed tool call, even
+when the service returns ordinary text rather than an MCP error. The research
+activity marks the turn incomplete and identifies the failed search or page
+retrieval. Existing saved rate-limit responses also display as failures without
+rewriting history. Finrod does not remove a configured key or silently switch
+to free access after a keyed request fails.
+
+The connection loads the two tool schemas before each conversation turn. If that connection
 fails, Finrod reports the failure without starting an inference request.
-There is no configured Exa credential or OAuth flow in this prototype.
+Personal Exa keys are supported; an Exa OAuth flow is not implemented.
 
 History persists in this browser on this device. Different browsers, devices,
 and website origins have independent histories; there is no automatic sync.
@@ -147,7 +163,9 @@ expected adaptation. The server's third-party MCP adapter remains unchanged.
 In **Settings**, select **Export all chats** to download `finrod-history.json`.
 The version 2 backup includes all chats, IDs, titles, and the active selection.
 Keep this file private: it includes conversation and tool content and is not encrypted.
-The configured provider key is not included. Export is unavailable during a turn.
+The backup is not a complete browser or execution log. Planned local encryption
+and complete conversation-log export are defined in [Roadmap](ROADMAP.md).
+The saved model and Exa keys are not included. Export is unavailable during a turn.
 
 In **Settings**, select **Restore backup**, choose a file, and confirm replacement.
 Restore replaces all chats, not only the active chat. Export current history
@@ -201,7 +219,27 @@ released the expected single-writer conflict. These checks made no live model or
 tool calls. Live checks above describe the earlier runtime verification, not a
 live title-generation check.
 
-Still unverified: actual iPhone behavior, the second user's Chrome phone session,
-phone-only setup, abrupt device termination, and large-history performance.
+The Exa-key and rate-limit changes pass browser typechecking/bundling and the
+same three controlled scenarios, extended at the browser boundary. The checks
+verify key save/reopen/removal, independent model and research keys, header
+rather than URL authentication, credential exclusion from model requests and
+backups, and visible keyed connection failures without fallback to free access.
+An upstream credential echo is redacted before the next model request.
+
+The rate-limit regression fails on the pre-fix browser code for the intended
+reason: ordinary Exa rate-limit text appears as successful research. It passes
+on the fixed code. The checks also verify a saved failed-tool flag and correct
+presentation of an older result without rewriting history. No additional test
+cases or production test seams were added. This run made no live inference or
+research requests.
+
+An Exa preflight from the preview origin permits the `x-api-key` header. This
+establishes browser transport permission, not successful live authentication.
+Live research with a personal Exa key and actual-phone behavior of these changes
+remain unverified. The deployed preview still uses the earlier build.
+
+Still unverified for release acceptance: the complete iPhone flow, the second
+user's Chrome phone session, phone-only setup, abrupt device termination, and
+large-history performance.
 The full server/installer suites and remote CI were not run for this change.
 Desktop evidence does not close the phone release gate in [Phone PRD](PHONE-PRD.md).
