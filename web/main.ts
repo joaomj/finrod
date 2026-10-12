@@ -1,9 +1,10 @@
 import { openBrowserAssistant, type ChatMessage } from "./runtime.js";
-import { MODEL } from "./model.js";
 import { openSidebar } from "./sidebar.js";
 import type { SessionList } from "./sessions.js";
 import { openTranscript } from "./transcript.js";
 import { readProviderKey, saveProviderKey } from "./credentials.js";
+import { readExaKey, saveExaKey } from "./research-key.js";
+import { redact } from "./redaction.js";
 
 const element = <T extends HTMLElement>(id: string): T => {
   const value = document.getElementById(id);
@@ -17,6 +18,8 @@ const form = element<HTMLFormElement>("composer");
 const input = element<HTMLTextAreaElement>("message");
 const key = element<HTMLInputElement>("provider-key");
 const forgetKey = element<HTMLButtonElement>("forget-key");
+const exaKey = element<HTMLInputElement>("exa-key");
+const forgetExaKey = element<HTMLButtonElement>("forget-exa-key");
 const send = element<HTMLButtonElement>("send");
 const stop = element<HTMLButtonElement>("stop");
 const connect = element<HTMLButtonElement>("connect");
@@ -24,9 +27,9 @@ const exportButton = element<HTMLButtonElement>("export");
 const restoreButton = element<HTMLButtonElement>("restore-open");
 const restoreInput = element<HTMLInputElement>("restore");
 const newChat = element<HTMLButtonElement>("new-chat");
-element<HTMLElement>("model").textContent = MODEL;
 let busy = false;
 let savedKey = "";
+let savedExaKey = "";
 let sessions: SessionList | undefined;
 let currentId: number | undefined;
 let resetTranscript = false;
@@ -35,6 +38,7 @@ const drafts = new Map<number, string>();
 let assistant: Awaited<ReturnType<typeof openBrowserAssistant>> | undefined;
 
 function report(message: string, state: "error" | "working" | "ready" = "error") {
+  message = redact(message, [savedKey, savedExaKey, key.value, exaKey.value]);
   if (status.textContent !== message) status.textContent = message;
   status.dataset.state = state;
   status.hidden = !message || (state === "ready" && settings.open);
@@ -47,7 +51,7 @@ function report(message: string, state: "error" | "working" | "ready" = "error")
 const draw = openTranscript(element("history"), element("messages"), element("empty"), element("latest"), report,
   async (index, vote, comment) => {
     if (!assistant) throw new Error("Local history is not ready. Reload Finrod and try again.");
-    await assistant.saveFeedback(index, vote, comment, savedKey);
+    await assistant.saveFeedback(index, vote, comment, [savedKey, savedExaKey]);
   });
 const render = (messages: ChatMessage[]) => { draw(messages, resetTranscript); resetTranscript = false; };
 const sidebar = openSidebar(element("sidebar"), element("chat-list"), element("chats-open"), element("chats-close"),
@@ -73,13 +77,14 @@ function updateControls() {
   send.disabled = busy || !assistant || !input.value.trim();
   connect.hidden = !!savedKey || !assistant || busy;
   forgetKey.disabled = busy || !savedKey;
+  forgetExaKey.disabled = busy || !savedExaKey;
   newChat.disabled = busy || !assistant;
   if (sessions) sidebar(sessions, busy);
 }
 function setBusy(value: boolean, stoppable = true) {
   busy = value;
   input.disabled = !assistant;
-  key.disabled = value;
+  key.disabled = exaKey.disabled = value;
   send.hidden = value && stoppable;
   stop.hidden = !value || !stoppable;
   stop.disabled = !value;
@@ -91,6 +96,7 @@ function setBusy(value: boolean, stoppable = true) {
 function openSettings() {
   if (settings.open) return;
   key.value = savedKey;
+  exaKey.value = savedExaKey;
   settingsStatus.textContent = "";
   settingsStatus.hidden = true;
   settings.showModal();
@@ -105,6 +111,9 @@ element("settings-form").addEventListener("submit", event => {
     const value = key.value.trim();
     if (value !== savedKey) saveProviderKey(value);
     savedKey = value;
+    const researchKey = exaKey.value.trim();
+    if (researchKey !== savedExaKey) saveExaKey(researchKey);
+    savedExaKey = researchKey;
     settings.close();
   } catch (error) { report(error instanceof Error ? error.message : String(error)); }
 });
@@ -117,8 +126,17 @@ forgetKey.addEventListener("click", async () => {
     if (assistant) await assistant.interrupt();
   } catch (error) { report(error instanceof Error ? error.message : String(error)); }
 });
+forgetExaKey.addEventListener("click", () => {
+  try {
+    saveExaKey("");
+    savedExaKey = exaKey.value = "";
+    updateControls();
+    report("Exa key forgotten from this browser. Free, rate-limited research remains available. Your history is unchanged.", "ready");
+  } catch (error) { report(error instanceof Error ? error.message : String(error)); }
+});
 settings.addEventListener("close", () => {
   key.value = savedKey;
+  exaKey.value = savedExaKey;
   updateControls();
   if (assistant) input.focus({ preventScroll: true });
 });
@@ -142,14 +160,14 @@ form.addEventListener("submit", async event => {
   report("Connecting…", "working");
   let succeeded = false;
   try {
-    await assistant.send(text, savedKey);
+    await assistant.send(text, savedKey, savedExaKey);
     succeeded = true;
     report("", "ready");
   } catch (error) {
     if (!input.value) { input.value = text; resizeInput(); }
     report(error instanceof Error ? error.message : String(error));
   } finally { setBusy(false); }
-  if (succeeded) assistant.requestTitle(savedKey);
+  if (succeeded) assistant.requestTitle(savedKey, savedExaKey);
 });
 
 async function interrupt() {
@@ -179,6 +197,7 @@ async function start() {
   if (!AbortSignal.any) throw new Error("Update your browser: Finrod's direct MCP connection needs AbortSignal.any.");
   if (!navigator.locks) throw new Error("This browser lacks the local history lock Finrod needs. Update your browser and try again.");
   savedKey = key.value = readProviderKey();
+  savedExaKey = exaKey.value = readExaKey();
   await navigator.locks.request("finrod-browser-history", { ifAvailable: true }, async lock => {
     if (!lock) { report("Another Finrod page owns this history. Close it, then reload this page."); return; }
     assistant = await openBrowserAssistant(render, report, updateSessions);

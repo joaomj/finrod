@@ -84,7 +84,7 @@ Do not add that machinery for hypothetical future features.
 | Phone-only setup | Open an HTTPS URL and configure personal provider access from the phone, without SSH, another computer, or server administration. |
 | Independent operation | Execute conversation logic and tools on the phone, with no Finrod backend or existing server dependency. |
 | Model conversation | Use OpenRouter directly, with `anthropic/claude-haiku-5.5` as the initial default. Show the selected model and the external inference boundary. |
-| Web research | Search and retrieve pages through Exa MCP. Return source links and distinguish retrieved evidence from unsupported claims. |
+| Web research | Search and retrieve pages through Exa MCP. Support an optional personal Exa key. Return source links, distinguish retrieved evidence from unsupported claims, and show rate-limit responses as failed research. |
 | Date-aware questions | Supply the device's current date and timezone so relative dates have an explicit reference. Treat the device clock as a reference, not verified external time. |
 | Local continuity | Restore saved history and usable model context after closing and reopening the browser. Re-enter credentials when required. |
 | Chat-first interface | Show a dark-only chat view, New chat, a hidden-by-default sidebar, formatted answers, source links, an expanding composer, and compact research activity. Respect the reader when they scroll away from new output. |
@@ -129,7 +129,10 @@ introduce a Node runtime on the phone.
 
 Exa documents keyless, rate-limited MCP access and personal API-key access.
 Keyless access is suitable for initial connection validation, not a guaranteed
-production quota. Explain rate limits and paid usage before requiring credentials.
+production quota. Explain rate limits and paid usage before using credentials.
+Accept an optional personal Exa API key in Settings. The same key authenticates
+Exa MCP. Send it in the `x-api-key` header, not a URL. A failed keyed request must
+remain visible; do not silently remove the key or switch to free access.
 Do not publish a shared operator key in the application.
 
 Exa's direct REST API is not the selected initial integration. Live preflight
@@ -146,7 +149,11 @@ localStorage, separate from the IndexedDB conversation records. Provide a
 **Forget key** control that removes the saved key without changing history.
 History export and restore must not include or replace the key. Explain that the
 saved key is not application-encrypted and recommend a spending-limited key.
-Any optional personal tool key must have an explicit storage policy.
+Save an optional personal Exa key in localStorage under `finrod.exa-key`,
+separately from conversation records and the model key. Restore it on reopening.
+Provide **Forget Exa key** without changing history. History export and restore
+must not include or replace either saved key. Saving and removing the Exa key
+use the same explicit Settings controls as the model key.
 
 OpenRouter and its selected inference provider receive submitted model context.
 Exa receives tool queries and requested URLs. These services have separate
@@ -154,7 +161,9 @@ billing, retention, and availability policies. Explain these boundaries before
 normal use. Keep credentials out of model context, logs, exports, and static
 application files.
 
-Local history is not application-encrypted. Device access, browser access,
+Local history and saved keys are not application-encrypted. Planned local
+encryption and complete conversation-log export belong in [Roadmap](ROADMAP.md).
+These plans do not change the current privacy guarantees. Device access, browser access,
 malicious application updates, and compromised hosting remain trust boundaries.
 Static hosting does not make the software distributor unable to access data
 through modified client code. Do not claim end-to-end encryption.
@@ -187,8 +196,13 @@ bundling. The same three controlled browser scenarios cover real legacy database
 migration, research, separate chat context, sequential IDs, delayed titles,
 reopen, all-chat export/restore, writer locking, interrupted tool recovery,
 storage failure, conversation and title failure, and credential redaction.
-No additional test cases were added. An isolated previous-version database
-migration preserved all 22 stored records and its original recovery copy.
+No additional test cases were added. The same scenarios now also verify the
+optional Exa-key lifecycle, header authentication, credential redaction, and
+visible rate-limit failures. The rate-limit regression fails on the pre-fix
+code for the intended reason and passes after the repair. These controlled
+checks do not verify live personal-key authentication or the new phone behavior.
+An isolated previous-version database migration preserved all 22 stored records
+and its original recovery copy.
 
 Live desktop Brave checks confirm direct native MCP search and a complete Haiku
 research conversation through OpenRouter and Exa, with a cited source.

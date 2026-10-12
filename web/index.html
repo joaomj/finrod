@@ -72,6 +72,12 @@
         <div class="settings-actions"><button id="forget-key" class="secondary-button" type="button" disabled>Forget key</button></div>
       </section>
       <section class="settings-section">
+        <label for="exa-key">Exa API key (optional)</label>
+        <input id="exa-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Use your own research account">
+        <p class="muted">Leave blank for free, rate-limited research. Select Done to save a personal key in this browser. Keyed requests use your Exa account and may incur charges. <a href="https://dashboard.exa.ai/api-keys" target="_blank" rel="noopener noreferrer">Get an Exa key</a>.</p>
+        <div class="settings-actions"><button id="forget-exa-key" class="secondary-button" type="button" disabled>Forget Exa key</button></div>
+      </section>
+      <section class="settings-section">
         <h3>History</h3>
         <p class="muted">All chats are saved in this browser only. Keep an external backup: clearing site data removes your history. Backups are not encrypted.</p>
         <div class="settings-actions">
@@ -82,9 +88,9 @@
       </section>
       <details class="privacy">
         <summary>About your data</summary>
-        <p>Model: <span id="model"></span>. OpenRouter and its selected model provider receive your conversation context.</p>
-        <p>Exa receives search queries and requested URLs. Its keyless access has rate limits. Each new chat uses one small extra model request to generate its title. There is no Finrod conversation backend or automatic request replay.</p>
-        <p>Your key is stored in this browser until you forget it. The key and history are not application-encrypted. Anyone with access to this browser profile or malicious website updates could read them.</p>
+        <p>Your configured model service and its inference provider receive submitted conversation context.</p>
+        <p>Your research service receives search queries and requested URLs. Free access has rate limits. Each new chat uses one small extra model request to generate its title. There is no Finrod conversation backend or automatic request replay.</p>
+        <p>Your keys are stored in this browser until you forget them. History backups exclude the saved keys. Keys and history are not application-encrypted. Anyone with access to this browser profile or malicious website updates could read them.</p>
       </details>
       <p id="settings-status" role="status" aria-live="polite" hidden></p>
       <button id="settings-done" class="primary-button" type="submit">Done</button>

@@ -88,6 +88,75 @@ The software distributor and update channel remain trust boundaries.
 Local data storage alone does not protect against malicious client code or a compromised device.
 Do not promise that every administrator is unable to read content without a defined and verified threat model.
 
+### Planned local encryption and key protection
+
+Protect local conversation history and saved credentials without introducing a
+mandatory Finrod backend. This work is planned, not a current privacy guarantee.
+The browser currently stores readable history and keys without application encryption.
+
+Assess two distinct layers:
+
+- **Device protection:** verify Apple Data Protection on the target iPhone and
+  FileVault where applicable on a Mac. Record the protection provided by the
+  actual browser, device configuration, and lock state. Device protection does
+  not prevent access by an unlocked browser profile or malicious website code.
+- **Application encryption:** assess authenticated encryption through the browser's
+  Web Crypto API. Cover messages, research results, partial replies, titles,
+  feedback, saved credentials, retained migration copies, and backups. Do not
+  keep an unprotected decryption key beside encrypted records.
+
+Prefer operating-system key protection when a supported integration exists.
+Apple Keychain can protect small secrets and encryption keys for applications
+that can access its native APIs. Do not assume that the phone browser can use
+Keychain as a storage API. Verify a browser-supported unlock method before
+selecting a design. Introducing a native app or mandatory bridge requires a
+separate product decision.
+
+Define unlock behavior, automatic locking, key recovery, cross-device restore,
+and key-loss behavior before migration. Explain which metadata remains visible.
+Encrypted backups require a recovery method independent of the original device.
+Storage encryption does not hide context sent to inference providers or protect
+plaintext while malicious application code can use an unlocked key.
+
+**Gate:** demonstrate the selected protection on the target phones, tamper
+rejection, lock behavior, and restore after device loss. Migrate existing history
+with a recoverable backup. Report any limits of an operating-system-only design.
+Do not claim end-to-end encryption or Keychain integration without evidence.
+
+### Planned complete conversation-log export
+
+Provide an explicit export for one selected conversation, similar to a Pi session
+export. Keep the control in Settings or the chat menu, not a task dashboard.
+The existing all-chat backup contains saved messages, but is not a complete
+execution log. This capability is planned, not implemented.
+
+The export must preserve chronological records and stable message, turn, and
+call identifiers. Include submitted context, assistant messages, tool arguments
+and results, errors, cancellations, completion states, and available timings.
+Include model and provider identifiers, usage metadata, application version,
+and relevant lifecycle and persistence events. Include title-generation events
+without mixing title requests into the conversation's model context.
+
+Distinguish recorded facts from missing information. Preserve provider-returned
+content where available; do not invent unavailable internal reasoning or lost
+progress. An export must report the interval and events it actually covers.
+
+Offer a redacted diagnostic mode by default. Require explicit confirmation for
+a complete content export containing private messages and research material.
+Both modes must exclude saved API keys, authentication headers, bearer tokens,
+and other configured credentials. Redaction is not a guarantee that arbitrary
+conversation text contains no sensitive data; explain that boundary.
+
+Keep collection and export local. Bound retained diagnostic data and define its
+deletion behavior. Do not silently upload logs or add mandatory telemetry.
+Use a versioned machine-readable format; a readable transcript can accompany it.
+Exporting a log must not replay requests or change conversation history.
+
+**Gate:** use an exported log to diagnose a successful research turn, a rate-limit
+failure, and an interrupted turn. Verify ordering, tool-call matching, credential
+redaction, explicit content consent, and coverage gaps. Verify export on the
+actual phones, including any interaction with planned encrypted storage.
+
 ### Feasibility and acceptance
 
 Verify the agreed foreground experience on an actual iPhone before selecting implementation technology.
@@ -295,4 +364,10 @@ rollback once new multi-user or encrypted state has been written.
   update identity, and message routing.
 - [OWASP Cryptographic Storage guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html):
   threat modeling, authenticated encryption, and key management.
+- [Apple Data Protection](https://support.apple.com/guide/security/data-protection-overview-secf6276da8a/web):
+  device encryption and protection classes.
+- [Apple Keychain services](https://developer.apple.com/documentation/security/keychain-services):
+  native APIs for protected small secrets and encryption keys.
+- [Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API):
+  browser cryptographic operations, not an operating-system keychain integration.
 - [Current architecture](ARCHITECTURE.md): implemented behavior, not the v1 target.
