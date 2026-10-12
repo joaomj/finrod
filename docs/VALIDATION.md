@@ -43,7 +43,10 @@ hooks were added.
 After the browser-only cleanup, browser typechecking and bundling passed. All
 three controlled scenarios passed with no live provider calls. Dependency cleanup
 removed 45 packages. JavaScript syntax checks and `git diff --check` also passed.
-Remote CI, dependency audit, and CodeQL were not run locally for this cleanup.
+The dependency audit and CodeQL were not run locally for the cleanup. The merged
+browser-only revision passed [GitHub CI](https://github.com/joaomj/finrod/actions/runs/38199160940),
+including the browser checks, dependency audit, and CodeQL. A version tag requires
+its own release gates to pass before publication.
 
 Run `npm test` for the controlled checks. Run `npm run check` for browser types.
 The two optional live scenarios are skipped unless explicitly enabled. See
@@ -69,7 +72,6 @@ copy. These observations do not establish actual-phone keyboard or migration beh
 - Verify independent local history and credentials for both users.
 - Check the actual phone keyboard and abrupt device termination.
 - Assess large-history performance before claiming capacity.
-- Review remote CI after the user merges or pushes the branch.
 
 No new release or deployment is implied by repository cleanup. The preview's
 existing personal-key build remains deployed. See [Product requirements](PRD.md)

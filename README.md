@@ -110,3 +110,4 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 | [Validation](docs/VALIDATION.md) | Automated evidence, user-reported phone checks, and remaining gaps |
 | [Roadmap](docs/ROADMAP.md) | Phone acceptance, planned local encryption, and complete log export |
 | [Releasing](docs/RELEASING.md) | Browser CI, security gates, and releases without automatic deployment |
+| [Changelog](CHANGELOG.md) | Versioned changes and release notes |

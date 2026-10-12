@@ -36,7 +36,7 @@ and deployments require explicit approval each time.
 1. Update `package.json` and the root package metadata in `package-lock.json`.
 2. Optionally write `docs/releases/vMAJOR.MINOR.PATCH.md` with user-facing changes,
    evidence, and limits.
-3. Commit the release changes, including the workflow itself, and review CI.
+3. Update `CHANGELOG.md`, commit the release changes, and review CI.
 4. Create an annotated `vMAJOR.MINOR.PATCH` tag on that commit and push it.
 5. Inspect the tag's workflow run. GitHub publishes the release only after its gates pass.
 
@@ -66,5 +66,5 @@ running website or browser installation. Build the selected revision and publish
 history before storage migrations or rollback. See [Operations](OPERATIONS.md).
 
 Do not claim that an older application can read state written by a newer release.
-The current `0.1.0` package version has not been advanced by this cleanup. A new
-browser release needs its own approved version, notes, checks, and publication.
+The `0.2.0` package version marks the browser-only release. Each release needs
+an approved version, changelog entry, notes, checks, and publication.
