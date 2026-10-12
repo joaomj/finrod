@@ -1,330 +1,123 @@
 # Architecture
 
-This document describes the single-user architecture, including unreleased imported-source retrieval.
-The v0.1.0 release does not include that retrieval capability. The proposed
-multi-user design is separate in [Roadmap](ROADMAP.md).
+Finrod runs its chat and research logic in the browser. Static hosting serves
+application files; it does not process conversations or store chat history.
+OpenRouter provides inference, and Exa provides research through Model Context
+Protocol (MCP). No Finrod conversation backend is required.
 
-Finrod is an AI chat companion, not a coding platform. Product features define
-requirements; Pi is the current implementation choice, not a product requirement.
-Pi makes functionality integration easier through extensions and Model Context
-Protocol (MCP) support. This document describes the existing server implementation.
-
-Finrod is a single-host personal assistant. Telegram provides the interface;
-Pi Durable owns conversation execution. The core stays small by using Pi's
-provider collection, extension registry, tools, and recovery machinery.
-Finrod does not implement a separate plugin framework or a model tool loop.
-
-## System overview
-
-```mermaid
-flowchart TB
-    owner["Owner"] <-->|"Private text, voice, votes / replies"| telegram["Telegram Bot API"]
-
-    subgraph host["Finrod host"]
-        adapter["Telegram adapter"]
-        voice["Voice download and transcription adapter"]
-        runtime["Pi Durable"]
-        topics["Scoped topic tools"]
-        mcp["Restricted MCP adapter"]
-        ledger[("Telegram SQLite ledger")]
-        conversation[("Durable SQLite state")]
-        knowledge["Markdown topics"]
-        sourceTools["Read-only source tools"]
-        sourceIndex[("ChatGPT SQLite index")]
-        sourceArchive["Unchanged ChatGPT ZIP"]
-
-        adapter <-->|"Conversation input / answer"| runtime
-        adapter <-->|"Voice / transcript"| voice
-        adapter <-->|"Inbox, transcripts, replies, votes"| ledger
-        runtime <-->|"Conversation and task state"| conversation
-        runtime <-->|"Explicit topic operations"| topics
-        topics <-->|"Scoped reads and writes"| knowledge
-        runtime <-->|"Historical retrieval"| sourceTools
-        sourceTools -->|"Read only"| sourceIndex
-        sourceArchive -.->|"One-time offline import"| sourceIndex
-        runtime <-->|"Allowlisted web tools"| mcp
-    end
-
-    telegram <-->|"Outbound polling / API requests"| adapter
-    runtime <-->|"Model requests / responses"| llm["Configured LLM provider"]
-    voice <-->|"Audio / transcribed text"| stt["Transcription service"]
-    mcp <-->|"Search and fetch"| exa["Exa MCP"]
-```
-
-Finrod runs as one application process. Its databases and Markdown files are
-separate stores, not one shared transaction. External services do not receive
-unrestricted access to local storage. Local transcription may run on the same
-machine but remains a separate service. Feedback goes to the Telegram ledger
-without starting a model turn.
+Pi agent-core owns model streaming, tool execution, and cancellation. Finrod owns
+browser persistence, chat selection, lifecycle handling, and recovery presentation.
+Pi is an implementation choice, not a product requirement. Finrod does not build
+a second agent engine or expose a coding environment.
 
 ## Components
 
-Deployment is separate from conversation execution. `scripts/install.sh` installs
-prerequisites, builds the checkout, and configures the user service.
-`scripts/validate-install.mjs` checks the private configuration and pinned model
-catalog without starting the bot or making provider requests. See
-[Operations](OPERATIONS.md#installation) for rerun and failure behavior.
-
 | Component | Responsibility | Implementation |
 | --- | --- | --- |
-| Service composition | Validate configuration, acquire a process lock, start and close components | `src/main.ts`, `src/config.ts` |
-| Conversation runtime | Open SQLite, install extensions, restore MCP tools, submit stable requests, return answer metadata | `src/runtime.ts` |
-| Telegram adapter | Authorize intake, poll updates, deliver replies, accept feedback callbacks | `src/telegram/adapter.ts` |
-| Telegram ledger | Persist inbox, cursor, outbox, bot identity, reply references, and votes | `src/telegram/store.ts` |
-| Assistant instructions | Conversation behavior and explicit-save policy | `src/extensions/persona.ts` |
-| Imported-source retrieval | Search and read the scoped ChatGPT index without mutations | `src/extensions/sources.ts`, `src/sources/chatgpt.ts` |
-| Knowledge extension | List, read, save, correct, and delete scoped Markdown topics | `src/extensions/knowledge.ts` |
-| Voice download | Bound download size and retry interrupted transfers | `src/telegram/voice.ts` |
-| Transcription | Convert voice-note bytes to text through a configured HTTP provider | `src/transcription.ts` |
-| Reply contract | Associate answer text with its Durable and model identifiers | `src/reply.ts` |
-| Feedback export | Read private metadata as JSON Lines without loading credentials or mutating state | `src/feedback-export.ts` |
+| Chat interface | Composer, Settings, browser lifecycle, and writer lock | `web/main.ts`, `web/index.html`, `web/style.css` |
+| Conversation runtime | Agent execution, saved progress, interruption, and chat selection | `web/runtime.ts` |
+| Local storage | IndexedDB transactions, chat records, titles, and feedback | `web/storage.ts` |
+| History contracts | Validate messages and backups; recover unfinished work | `web/history.ts`, `web/sessions.ts` |
+| Model access | Configure OpenRouter and the initial model | `web/model.ts` |
+| Research | Connect native Pi MCP to Exa; map tools and visible failures | `web/mcp.ts` |
+| Titles | Make one bounded, tool-free request after the first successful exchange | `web/titles.ts` |
+| Presentation | Sidebar, safe Markdown, transcript, and research activity | `web/sidebar.ts`, `web/markdown.ts`, `web/transcript.ts` |
+| Feedback | Validate votes and present an optional negative-vote comment | `web/feedback.ts`, `web/feedback-ui.ts` |
+| Credentials | Save model and research keys separately; redact configured values | `web/credentials.ts`, `web/research-key.ts`, `web/redaction.ts` |
+| Earlier browser migration | Read the original SQLite snapshot without starting requests | `web/legacy.ts` |
+| Static distribution | Bundle browser files and serve a local preview | `scripts/build-web.mjs`, `scripts/serve-web.mjs` |
 
-### Request flow
+## Request flow
 
-1. Telegram updates arrive through outbound long polling.
-2. Authorized text and voice updates enter the SQLite inbox before the cursor advances.
-3. For voice input, Finrod downloads the audio and stores a completed transcript.
-4. The runtime submits the text to the root conversation with a stable request ID.
-5. Pi Durable runs model turns and selected tools, then stores the answer.
-6. Finrod records the answer's references and outgoing message parts atomically.
-7. Telegram delivery records move from pending to sending to sent, or uncertain.
-8. Owner feedback callbacks update local metadata without starting model turns.
+1. The user submits a message from the active chat.
+2. Finrod validates provider access and connects directly to Exa for tool schemas.
+3. Agent-core starts the turn and saves user input before inference.
+4. OpenRouter receives the active chat's model context, device date, and timezone.
+5. Agent-core streams replies and executes the two Exa tools sequentially.
+6. Finrod saves completed assistant and tool messages before execution continues.
+7. Finrod saves the final turn state and displays failures or interruptions.
+8. After the first successful exchange, a separate request generates the chat title.
 
-The v0 worker is sequential. Messages arriving during a model turn remain queued
-at Telegram until the next poll. Feedback callbacks also wait for that turn.
-This keeps orchestration small but can delay feedback confirmation.
-
-## Runtime and extensions
-
-The application pins Pi Durable, Pi AI, and Chord at `1.1.0`, and the third-party
-`pi-mcp-client` adapter at `0.12.0`. The MCP client SDK is overridden to `2.2.0`
-to avoid the OAuth credential-routing vulnerability reported against `2.1.0`.
-Package versions are locked in `package-lock.json`.
-
-The runtime installs the persona, knowledge, imported-source, and Durable MCP extensions.
-The runtime configures the explicit baseline tool list on both new and existing root conversations.
-MCP restores
-persisted tool registrations before `harness.resume()`. Runtime code never
-installs Pi's coding tools or supplies a general execution environment.
-
-Inspect Pi's existing behavior and the integration before adding capabilities.
-For additions to the current server runtime, use scoped Pi Durable extensions.
-Keep Telegram interaction logic in the adapter and provider protocols outside it. Extension code is trusted
-application code; Pi's registry is not a sandbox for arbitrary third-party code.
-The current application composes extensions in source, not through automatic
-package discovery.
-
-Finrod uses one root conversation. Topic summaries restore context within that
-conversation; they do not create independent branches. Pi Durable retains raw
-conversation history behind compaction summaries.
+Title requests do not enter chat context or block another chat. Failed titles are
+not automatically retried. Feedback changes local records without a model request.
+Finrod does not submit one chat's history as another chat's context.
 
 ## Storage and recovery
 
-`FINROD_DATA_DIR` defaults to `~/.local/share/finrod`. It is separate from the
-checkout and credential file. The [operations guide](OPERATIONS.md) describes
-backups and migration.
+IndexedDB database `finrod-browser`, version 3, contains the chat library:
 
-### Durable database
+- `sessions`: IDs, titles, feedback, partial replies, turn state, and record counts.
+- `chatMessages`: completed messages keyed by `[session_id, message_index]`.
+- `library`: active selection and the next sequential chat ID.
 
-`conversation.sqlite` stores Pi Durable conversations, entries, submissions,
-tasks, and documents. Request IDs use the bot ID and Telegram update ID.
-Resubmitting the same request after a crash finds the same Durable submission.
-The response metadata uses the provider and model from the stored assistant
-message, not merely the current configuration.
+Writes use transactions. Normal turns append completed records rather than
+exporting a whole database. Streaming saves partial progress at most once per
+500 ms. An abrupt close can lose progress since the last completed save.
+A storage failure blocks unsafe continuation until reload.
 
-The pinned SQLite backend uses WAL with `synchronous=NORMAL`. Process crashes
-and host power failures are different: recent conversation commits can be lost
-after a power failure. Backups remain necessary.
+Web Locks permits one page to write the library. A second page reports the
+conflict. Finrod cancels active work when the page becomes hidden where possible.
+Reopening marks unfinished turns interrupted and supplies explicit failed results
+for unfinished tool calls. Recovery does not replay external requests.
+Cancellation cannot guarantee that providers stop processing or cancel charges.
 
-### Telegram database
+Earlier IndexedDB histories and the original Durable/SQLite browser snapshot
+migrate into chat 1. The original records remain untouched as recovery copies.
+Only the original snapshot migration loads Pi Durable, Chord, sql.js, and SQLite
+WebAssembly. Normal chat execution does not use those dependencies. The browser
+test also uses real Durable storage to create its migration input.
 
-`telegram.sqlite` uses WAL with `synchronous=FULL`:
+The all-chat backup uses format `finrod-phone`, version 2. Each chat contains
+version 1 history. Restore validates the complete backup before replacement and
+preserves the browser's increasing ID counter. Version 1 single-chat backups
+remain supported. Restore does not submit model or tool requests.
 
-| Table | Contents |
-| --- | --- |
-| `identity` | Bound bot and owner IDs; startup rejects a different identity |
-| `cursor` | Next Telegram update offset |
-| `inbox` | Authorized input payload, optional transcript, processing outcome |
-| `outbox` | Reply text and part number, source update, delivery state, Telegram message ID |
-| `reply_metadata` | Request ID, conversation ID, submission ID, answer entry ID, provider, model |
-| `feedback` | One current vote per delivery, owner ID, latest callback update ID, UTC timestamps |
+## Model and research access
 
-Intake and cursor advancement share a transaction. Completed work and its
-outgoing parts share another transaction. Stable Durable request IDs bridge the
-two databases; there is no transaction spanning Telegram and Durable storage.
+The initial model is `anthropic/claude-haiku-5.5` through OpenRouter. Model
+configuration and tool execution use pinned Pi packages, not a separate provider
+framework. Dependency versions are locked in `package-lock.json`.
 
-Telegram cannot guarantee exactly-once delivery. A crash or network loss after
-sending but before recording the response leaves an uncertain outcome. Startup
-moves unfinished sending records to uncertain rather than resending them.
-`/status` exposes their recorded text. Unexpected processing errors create a
-failure notice, mark the input failed, and propagate to the service process.
+The native Pi MCP client connects directly to
+`https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa` over streamable HTTP.
+Only `web_search_exa` and `web_fetch_exa` are exposed. Finrod does not expose shell,
+filesystem, coding, or dynamically discovered tools.
 
-A separate `process-lock.sqlite` holds an exclusive transaction for the lifetime
-of the process. It prevents concurrent owners of the same local directory, not
-instances on different hosts or instances using different directories.
+Pi MCP `1.1.0` needs a browser build adaptation: exclude Node-only stdio exports
+and replace HTTP stream byte counting with `TextEncoder`. The build rejects a
+changed parser rather than silently applying an incompatible adaptation.
 
-### Feedback
+An optional personal Exa key uses the `x-api-key` header, never a URL parameter.
+Blank credentials select free, rate-limited access. A rejected keyed request
+remains a failure without fallback to free access. Known free-limit text counts
+as failed research even when Exa does not set the MCP error flag. Older saved
+results display correctly without rewriting their history.
 
-Only new model-generated replies receive feedback buttons. Each button carries
-the delivery ID and vote. The adapter checks the callback user's identity and
-private-chat context. The store requires the delivery ID, chat ID, and sent
-Telegram message ID to match a rated model reply before recording a vote.
+## Privacy and distribution
 
-The vote and callback cursor advance atomically. A newer callback can change the
-vote; repeated or older callbacks cannot overwrite newer state. The first-vote
-timestamp stays fixed, and the change timestamp advances only when the vote
-changes. Only the latest vote is retained. No automatic training, evaluation,
-or prompt changes consume feedback.
+Saved keys use localStorage, separate from conversation records. The model key
+uses `finrod.openrouter-key`; the research key uses `finrod.exa-key`. Settings
+saves keys only after **Done**. Export and restore exclude saved keys.
+Configured credential values are redacted from external results, displayed
+errors, persisted errors, title results, and feedback comments.
 
-Split Telegram messages are independently rateable. Their part numbers point to
-the same Durable answer. Export joins the current vote to the source message,
-reply, and model identifiers without including message text. Export uses a
-read-only SQLite connection, so it cannot run startup recovery or alter votes.
+History and saved keys are not application-encrypted. Backups contain private
+chat and tool content. Browser access, device access, hosting, and updates remain
+trust boundaries. Modified application code can access readable local data.
+Local encryption and complete diagnostic export are planned in [Roadmap](ROADMAP.md).
 
-### Knowledge pages
+OpenRouter and its inference provider receive submitted context. Exa receives
+queries and requested URLs. Static hosting does not hide these external requests
+or guarantee that administrators cannot change application code.
 
-`knowledge/` holds one Markdown page per saved topic. Tools restrict topic IDs
-to a short lowercase slug, refuse symlinks on reads, and limit pages to 64 KiB.
-Writes use a private temporary file, file synchronization, atomic replacement,
-and directory synchronization. Tool calls execute sequentially.
+`npm run build` checks browser types and writes `web-dist/`. The preview server
+serves those files only. Publish the complete directory over HTTPS for phone use.
+Use a stable origin: another origin has different local history and credentials.
+Builds must not include keys, private histories, or local configuration.
 
-Read tools are replay-safe. Save and delete tools are replay-unsafe: an
-interrupted call reports interruption rather than silently repeating a mutation.
-Saved pages contain a reference to their conversation and writing tool task.
-Related topics use Markdown links; web sources remain URLs in the page.
+## References
 
-The instruction to save only on explicit request is model behavior, not a
-semantic authorization engine. File confinement is enforced separately by the
-scoped tool interface. Deleting a page does not erase its earlier content from
-conversation history or backups. There is no QMD index in v0.
-
-### Imported sources
-
-`sources/chatgpt/export.zip` preserves an external ChatGPT export unchanged.
-`sources/chatgpt/index.sqlite` is a derived access structure, not the authoritative archive.
-Finrod keeps source archives and indexes separate from its conversation and Telegram databases.
-It does not use a bronze/silver/gold transformation pipeline.
-
-Offline preparation parses numbered conversation JSON members.
-One-time preparation scripts stay outside the repository.
-The index stores original conversation and message JSON with queryable identifiers, roles, dates, and text.
-SQLite FTS5 indexes text and multimodal text, including transcription text.
-Reasoning records remain stored but are excluded from retrieval.
-No model calls, memory extraction, topic generation, or attachment interpretation occur during import.
-
-The extension exposes `source_search`, `source_conversation`, and `source_message`.
-Reads use short-lived read-only SQLite connections, bounded output, and positional query parameters.
-The model cannot supply filesystem paths or SQL statements.
-Search query syntax is SQLite FTS5 syntax. Invalid syntax reports a tool error.
-Startup rejects symlinked source paths, missing indexes in a source directory, and unsupported index versions.
-An absent import does not prevent normal conversation; search reports that no source is available.
-Restart Finrod after adding an import.
-
-Conversation excerpts follow exported mapping order and include parent node IDs.
-They do not reconstruct branches. Message retrieval paginates text by Unicode character offset.
-Every result identifies its imported conversation and message; assistant suggestions remain distinct from user statements.
-Imported content is untrusted historical evidence, not current instructions or saved personal knowledge.
-Retrieved passages are stored as tool results and sent to the configured model provider.
-Source files are private and read-only by permission, not encrypted or protected from a privileged operator.
-See [Operations](OPERATIONS.md#import-a-chatgpt-archive) for import and deployment steps.
-
-## External services
-
-### Exa
-
-The Durable MCP adapter connects to the hosted Exa endpoint with only
-`web_search_exa` and `web_fetch_exa` enabled. Client-side exposure is hidden by
-default, with exact exceptions for those two tools. The model cannot activate
-other Exa tools merely because a server advertises them.
-
-`EXA_API_KEY`, when configured, is sent as `x-api-key`. Omitting it selects Exa's
-free keyless access. Authentication uses account billing and limits, not unlimited
-access. There is no fallback that removes a configured key after failure.
-Interrupted MCP calls are not automatically replayed by the adapter.
-
-### Voice
-
-The implemented transcription defaults are OpenRouter and `openai/whisper-large-v3`,
-not requirements on which provider to use. With these defaults, startup requires
-`OPENROUTER_API_KEY` even if the selected chat provider is different. Requests go to
-`/audio/transcriptions` as base64 JSON with `provider.zdr=true`; there is no
-fallback that relaxes ZDR. The local OpenAI-compatible adapter uses multipart
-uploads to the same endpoint path and accepts an optional authentication key.
-Both transports send `TRANSCRIPTION_LANGUAGE` as the `language` field. The
-default is `pt`, including Brazilian Portuguese. OpenRouter requires an ISO-639-1
-code, and Whisper identifies Portuguese as `pt`, not `pt-BR`. Configuration
-normalizes case and surrounding whitespace and rejects empty values or codes
-that are not two letters. Language availability still depends on the selected
-model and provider. This is a recognition hint, not a translation instruction.
-
-These transports do not use the Responses API.
-
-Telegram audio is downloaded into memory with a 20 MiB limit. The downloader in
-`src/telegram/voice.ts` retries recognized transient network failures up to three
-total attempts, with one-second and two-second delays. Each attempt has a
-30-second deadline and discards partial audio. HTTP errors, empty downloads,
-and size-limit failures are not retried. Exhaustion preserves the final error;
-transcription requests are not retried by this downloader. Finrod retains the
-transcript, not a local audio recording. A crash before transcript persistence
-can repeat transcription and its charge. Large recordings are not automatically
-split and can exceed upstream processing limits.
-
-## Configuration alternatives
-
-The configuration contract is implemented in [`src/config.ts`](../src/config.ts)
-and provider validation in [`src/runtime.ts`](../src/runtime.ts). Configure
-`TELEGRAM_BOT_TOKEN` and `TELEGRAM_USER_ID` for the private Telegram owner.
-The user ID must be a positive numeric ID, not a username.
-
-`FINROD_MODEL_PROVIDER` supports `openrouter`, `anthropic`, and `openai`.
-`FINROD_MODEL` must name a model in that provider's pinned Pi catalog. Direct
-Anthropic and OpenAI providers use `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`.
-
-For local Whisper:
-
-```dotenv
-TRANSCRIPTION_PROVIDER=openai-compatible
-TRANSCRIPTION_BASE_URL=http://127.0.0.1:8000/v1
-TRANSCRIPTION_MODEL=whisper-1
-TRANSCRIPTION_LANGUAGE=pt
-```
-
-Use the model ID your server accepts. Set `TRANSCRIPTION_API_KEY` if required.
-Remote transcription endpoints must use HTTPS; HTTP is restricted to loopback.
-Changing providers is a configuration operation, not a Telegram adapter change.
-
-Changing `FINROD_DATA_DIR` requires updating the service's `ReadWritePaths` too.
-Use an absolute path outside the checkout. Credentials are process environment
-settings, not model-accessible files or prompt content.
-
-## Security and privacy boundaries
-
-- Telegram accepts only the configured owner in private chats.
-- External sources stay read-only. Finrod can write its own conversation,
-  knowledge, operational state, and feedback.
-- The model has no shell, coding, or unrestricted filesystem tools.
-- Web content and tool output are untrusted source material, not instructions.
-- OpenRouter account-wide ZDR can cover chat; the application additionally
-  requires it per transcription request. The user reports account-wide ZDR enabled.
-- ZDR does not cover Telegram, Exa, local databases, logs, or backups.
-- v0.1.0 does not encrypt stored conversations or topics at the application layer.
-  File permissions restrict ordinary OS access, not a privileged administrator.
-- The systemd template restricts writes to the data directory and private temporary
-  storage. It runs as the user, not root, with `NoNewPrivileges` and private files.
-- Known secret environment values are redacted from application error messages.
-  Logs can still contain personal provider error content; protect them accordingly.
-
-## Verification and references
-
-[Validation](VALIDATION.md) owns automated coverage, live evidence, and remaining
-gaps. [Operations](OPERATIONS.md) covers service management, retention, and backup.
-[Product requirements](PRD.md) records scope, acceptance criteria, and next steps.
-
-Provider references:
-
-- [OpenRouter speech-to-text guide](https://openrouter.ai/docs/guides/overview/multimodal/stt):
-  transcription requests and ZDR routing.
-- [OpenRouter transcription API](https://openrouter.ai/docs/api/api-reference/stt/create-transcription):
-  the `language` field uses an ISO-639-1 code.
-- [Whisper language mapping](https://github.com/openai/whisper/blob/main/whisper/tokenizer.py):
-  Portuguese is `pt`, without a separate Brazilian regional code.
+- [Product requirements](PRD.md): user outcomes and acceptance criteria.
+- [Browser](BROWSER.md): current behavior, preview, migration, and backup format.
+- [Operations](OPERATIONS.md): hosting, updates, and recovery.
+- [Validation](VALIDATION.md): observed behavior and verification limits.

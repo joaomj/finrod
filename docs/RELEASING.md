@@ -1,36 +1,35 @@
 # Checks and releases
 
-Finrod is self-hosted software. GitHub automation publishes checked versions;
-it does not deploy to the VPS or any user's instance. No bot tokens, provider
-keys, SSH credentials, or conversation databases belong in Actions secrets or
-artifacts for this workflow.
+Finrod is a static browser application. GitHub automation publishes checked
+source versions; it does not deploy to Cloudflare or change users' browser data.
+Provider keys, private histories, local configurations, and screenshots must not
+become Actions secrets or artifacts for this workflow.
 
 ## Workflow
 
-`.github/workflows/ci-release.yml` runs on pull requests, pushes to `master`,
+`.github/workflows/ci-release.yml` runs on pull requests, pushes to `master` or `main`,
 version-tag pushes, and manual dispatch. Release publication happens only for
 a tag push, after all required jobs succeed.
 
 | Gate | Required outcome |
 | --- | --- |
-| Build and types | Locked dependency installation, typecheck, and compilation succeed |
-| Application tests | Telegram, knowledge, and voice integration tests pass |
-| Installer checks | Bash/JavaScript syntax, ShellCheck, and the isolated installation/rerun test pass |
+| Build and types | Locked dependency installation, browser typecheck, and bundling succeed |
+| Browser tests | The three controlled browser scenarios pass in Chromium |
 | Dependency security | `npm audit` reports no high or critical advisories, including development dependencies |
 | Code security | CodeQL analysis completes and its SARIF contains no high/critical security findings or error-level results |
 | Release metadata | Tag and package/lockfile versions agree; optional versioned notes are not empty |
 
 Lower-severity findings remain visible for review. Scan failures are not converted
 to success, and a successful SARIF upload alone does not satisfy the findings gate.
-These checks reduce risk; they do not certify security or establish multi-user
-privacy guarantees. CodeQL covers JavaScript/TypeScript; ShellCheck covers the
-installer. Neither proves deployment correctness or replaces threat modeling.
+These checks reduce risk; they do not certify security or establish phone
+acceptance. CodeQL covers JavaScript/TypeScript. Automated checks do not prove
+deployment correctness or replace threat modeling.
 
 Actions are pinned to commit hashes. Workflow permissions are read-only by
 default; CodeQL can upload security results, and only the gated publication job
 can write a release. Checkout does not persist Git credentials. Automatic
-dependency-update branches and pull requests are disabled. Dependency changes
-require explicit approval; security scanning remains enabled.
+dependency-update branches and pull requests are disabled. Security scanning remains enabled. Commits, pushes, tags, release publication,
+and deployments require explicit approval each time.
 
 ## Publish a version
 
@@ -59,10 +58,13 @@ Repository administrators should protect release tags and the default branch
 and require these checks. YAML alone does not prevent an administrator from
 bypassing the workflow or publishing a release manually.
 
-## Installation and updates
+## Static distribution and updates
 
-A successful release makes source available on GitHub; it does not change any
-running instance. Operators select the release, back up their state, and use the
-[installation and update procedure](OPERATIONS.md#installation). Do not assume
-an older executable can read state written by a newer release, especially across
-the future multi-user and encryption migration.
+A successful release makes source available on GitHub. It does not change a
+running website or browser installation. Build the selected revision and publish
+`web-dist/` only after deployment approval. Keep the stable origin and export
+history before storage migrations or rollback. See [Operations](OPERATIONS.md).
+
+Do not claim that an older application can read state written by a newer release.
+The current `0.1.0` package version has not been advanced by this cleanup. A new
+browser release needs its own approved version, notes, checks, and publication.

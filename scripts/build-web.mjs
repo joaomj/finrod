@@ -42,4 +42,4 @@ await build({
 });
 for (const name of ["index.html", "style.css"]) await copyFile(resolve(root, "web", name), resolve(output, name));
 await copyFile(resolve(root, "node_modules/sql.js/dist/sql-wasm-browser.wasm"), resolve(output, "sql-wasm.wasm"));
-console.log(`Built the phone-local prototype in ${output}. No credentials are embedded.`);
+console.log(`Built the browser application in ${output}. No credentials are embedded.`);

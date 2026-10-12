@@ -29,6 +29,6 @@ const server = createServer(async (request, response) => {
 });
 server.on("error", error => { console.error("Browser development server failed:", error); process.exitCode = 1; });
 server.listen(port, host, () => {
-  console.log(`Finrod static prototype: http://${host}:${port}`);
+  console.log(`Finrod browser preview: http://${host}:${port}`);
   console.log("This server only serves files. Use HTTPS for access from an iPhone; it does not proxy model requests.");
 });
