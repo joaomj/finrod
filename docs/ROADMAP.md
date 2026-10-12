@@ -5,6 +5,13 @@ The [v0 PRD](PRD.md) defines the single-user product;
 [Validation](VALIDATION.md) records what has actually been demonstrated.
 Nothing in the v1 design below is implemented or a current privacy guarantee.
 
+Finrod is an AI chat companion, not a coding platform. The target experience is
+close to ChatGPT's core chat experience, without Dots, Projects, Codex, Work, or
+other separate product surfaces. Product features define requirements. Pi is
+the current implementation choice because it simplifies functionality integration
+through extensions and Model Context Protocol (MCP) support. Pi itself is not a
+product requirement.
+
 ## Self-hosting is the product model
 
 Finrod is software that users or instance operators run on infrastructure they
@@ -54,6 +61,20 @@ Each user has an independent local instance, even when users download the softwa
 In this mode, "my own Finrod" means an independent personal assistant, not a separate Telegram bot account.
 Telegram bot hosting, scheduled jobs, and continuous operation while the phone is locked are outside this initial target.
 The existing server-hosted Telegram mode remains separate.
+
+### Browser-first delivery
+
+Prioritize reliable daily browser use on the target phones. Telegram is a delivery
+channel, not a product requirement. Browser acceptance does not require Telegram
+feature parity; use the agreed phone outcomes and release gate.
+
+Keep the existing Telegram installation working without expanding its feature scope.
+Continue necessary maintenance and security fixes. Consider Telegram retirement
+only after daily browser use demonstrates comfort and reliability. Retirement
+remains undecided; preserve the existing installation and its data.
+
+The shared-bot v1 design below remains a future option, not a prerequisite for
+browser delivery or a reason to expand Telegram now.
 
 ### Privacy and hosting boundaries
 

@@ -4,6 +4,11 @@ This document describes the single-user architecture, including unreleased impor
 The v0.1.0 release does not include that retrieval capability. The proposed
 multi-user design is separate in [Roadmap](ROADMAP.md).
 
+Finrod is an AI chat companion, not a coding platform. Product features define
+requirements; Pi is the current implementation choice, not a product requirement.
+Pi makes functionality integration easier through extensions and Model Context
+Protocol (MCP) support. This document describes the existing server implementation.
+
 Finrod is a single-host personal assistant. Telegram provides the interface;
 Pi Durable owns conversation execution. The core stays small by using Pi's
 provider collection, extension registry, tools, and recovery machinery.
@@ -103,8 +108,8 @@ persisted tool registrations before `harness.resume()`. Runtime code never
 installs Pi's coding tools or supplies a general execution environment.
 
 Inspect Pi's existing behavior and the integration before adding capabilities.
-When an addition is necessary, use scoped Pi Durable extensions. Keep Telegram interaction
-logic in the adapter and provider protocols outside it. Extension code is trusted
+For additions to the current server runtime, use scoped Pi Durable extensions.
+Keep Telegram interaction logic in the adapter and provider protocols outside it. Extension code is trusted
 application code; Pi's registry is not a sandbox for arbitrary third-party code.
 The current application composes extensions in source, not through automatic
 package discovery.

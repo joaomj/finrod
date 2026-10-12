@@ -1,11 +1,14 @@
 import type { ChatMessage } from "./runtime.js";
 import { renderMarkdown } from "./markdown.js";
+import { openFeedback } from "./feedback-ui.js";
+import type { Vote } from "./feedback.js";
 
 type Block = { id: string; messages: ChatMessage[] };
 type View = { node: HTMLElement; signature: string; update: (messages: ChatMessage[]) => void };
 
 export function openTranscript(history: HTMLElement, container: HTMLElement, empty: HTMLElement,
-  latest: HTMLButtonElement, report: (message: string) => void) {
+  latest: HTMLButtonElement, report: (message: string) => void,
+  saveFeedback: (index: number, vote: Vote, comment: string) => Promise<void>) {
   const views = new Map<string, View>();
   let following = true;
   let height = history.clientHeight;
@@ -48,16 +51,24 @@ export function openTranscript(history: HTMLElement, container: HTMLElement, emp
       } catch (error) { report(`Could not copy the answer: ${error instanceof Error ? error.message : String(error)}`); }
     });
     node.append(body, warning);
-    if (message.role === "assistant") node.append(copy);
+    const actions = document.createElement("div");
+    actions.className = "answer-actions";
+    const feedback = message.role === "assistant" ? openFeedback(message.message_index,
+      (vote, comment) => saveFeedback(message.message_index, vote, comment), report) : undefined;
+    actions.append(copy);
+    if (feedback) { actions.append(feedback.buttons); node.append(actions, feedback.editor); }
     return { node, signature: "", update: messages => {
       const message = messages[0]!;
-      text = message.text;
-      if (message.role === "user") body.textContent = text;
-      else renderMarkdown(body, text);
+      if (text !== message.text) {
+        text = message.text;
+        if (message.role === "user") body.textContent = text;
+        else renderMarkdown(body, text);
+      }
       warning.textContent = message.error ?? "";
       warning.hidden = !message.error;
       body.hidden = !text;
-      copy.hidden = message.partial || !text;
+      actions.hidden = message.partial || !text;
+      feedback?.update(message.feedback, message.rateable);
       node.classList.toggle("partial", message.partial);
     } };
   }
@@ -91,12 +102,12 @@ export function openTranscript(history: HTMLElement, container: HTMLElement, emp
     const blocks: Block[] = [];
     let turn = -1;
     let activity: Block | undefined;
-    messages.forEach((message, index) => {
-      if (message.role === "user") { turn = index; activity = undefined; }
+    messages.forEach(message => {
+      if (message.role === "user") { turn = message.message_index; activity = undefined; }
       if (message.role === "tool") {
         if (!activity) { activity = { id: `activity-${turn}`, messages: [] }; blocks.push(activity); }
         activity.messages.push(message);
-      } else blocks.push({ id: `${message.role}-${index}`, messages: [message] });
+      } else blocks.push({ id: `${message.role}-${message.message_index}`, messages: [message] });
     });
     const retained = new Set(blocks.map(block => block.id));
     for (const [id, view] of views) if (!retained.has(id)) { view.node.remove(); views.delete(id); }
@@ -118,7 +129,13 @@ export function openTranscript(history: HTMLElement, container: HTMLElement, emp
     else latest.hidden = atBottom();
   }
 
-  return (messages: ChatMessage[]) => {
+  return (messages: ChatMessage[], reset = false) => {
+    if (reset) {
+      following = true;
+      views.clear();
+      container.replaceChildren();
+      latest.hidden = true;
+    }
     pending = messages;
     if (scheduled) return;
     scheduled = true;
