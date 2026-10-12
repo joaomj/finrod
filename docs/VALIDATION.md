@@ -73,6 +73,20 @@ copy. These observations do not establish actual-phone keyboard or migration beh
 - Check the actual phone keyboard and abrupt device termination.
 - Assess large-history performance before claiming capacity.
 
-No new release or deployment is implied by repository cleanup. The preview's
-existing personal-key build remains deployed. See [Product requirements](PRD.md)
-for the complete acceptance gate and [Roadmap](ROADMAP.md) for planned protection.
+See [Product requirements](PRD.md) for the complete acceptance gate and
+[Roadmap](ROADMAP.md) for planned protection. The preview's release alignment
+is recorded below.
+
+## Cloudflare release alignment
+
+Cloudflare production deployment `70acc90a` records the `v0.2.0` commit
+`46fd1348611b45f9ca67c513e68eef778c6b2fa2`. All 23 static assets at
+**https://finrod-preview.pages.dev** matched the release build over HTTPS.
+This check made no model or research requests. The stable origin did not change.
+
+The deployment workflows passed actionlint `1.7.12`. The release-selection script
+verified the real published `v0.2.0` tag, its commit, and successful release gates
+through the GitHub API. The hosted-file verifier matched all 23 release assets,
+including Cloudflare's canonical homepage at `/`. These were read-only checks.
+A GitHub-hosted deployment using the new workflow remains unverified until the
+workflow is merged and activated.

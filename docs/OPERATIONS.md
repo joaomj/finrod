@@ -20,17 +20,21 @@ npm run build
 Publish the complete `web-dist/` directory on an HTTPS static host. Include the
 JavaScript chunks, styles, HTML, and SQLite WebAssembly used for earlier browser
 migration. Do not publish the checkout, dependencies, private exports, credentials,
-or screenshots. No functions, provider proxy, or hosting secrets are required.
+or screenshots. The deployed application has no functions, provider proxy, or
+hosting credentials. GitHub Actions uses separate secrets only to upload assets.
 
-Publishing or changing hosting requires explicit approval. The GitHub release
-workflow does not deploy to Cloudflare or another static host.
+Published, checked stable releases automatically update the existing Pages origin.
+The deployment workflow selects the exact latest release commit and verifies all
+hosted assets after upload. It does not deploy ordinary commits or PRs.
+Other hosting changes and manual uploads require separate approval. See
+[Releasing](RELEASING.md#automatic-cloudflare-deployment) for credentials and gates.
 
 ## Updates
 
 1. Export current chats before changing an installation or storage format.
 2. Review checks and known migration limits for the selected revision.
-3. Build and verify the browser application locally.
-4. Publish only after deployment approval.
+3. Approve and publish the version through the release workflow.
+4. Confirm the automatic deployment and hosted-file verification succeeded.
 5. Reopen the stable origin and verify chat continuity and research.
 
 Do not clear site data as an update step. Earlier browser records remain recovery
@@ -64,6 +68,8 @@ exists. There is no automatic synchronization or remote recovery service.
 - **Rejected key:** check the respective provider account and replace the key in Settings.
 - **Interrupted answer:** inspect saved progress and submit a new message explicitly. Finrod does not automatically retry unfinished work.
 - **Missing history at another URL:** return to the original origin, export there, then restore at the intended origin.
+- **Release not deployed:** inspect **Deploy published release to Cloudflare** in GitHub Actions. Check secret configuration, the latest-release selection, and successful tag CI.
+- **Deployment verification failed:** inspect whether upload completed before the failure. Do not assume the old site remains active or repeat a mutation blindly.
 
 A configured Exa key is not silently removed after failure. A research connection
 failure prevents inference from starting. Cancellation does not guarantee that

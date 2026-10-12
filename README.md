@@ -66,7 +66,8 @@ npm run web:serve
 Open `http://127.0.0.1:4173` on the development computer. The development server
 serves only `web-dist/`; it does not proxy conversations or provider requests.
 For phone access, publish the complete `web-dist/` directory on an HTTPS static
-host. Publishing requires explicit approval. No credentials belong in the build.
+host. Published, checked releases automatically update the existing Cloudflare
+preview; other hosting changes require approval. No credentials belong in the build.
 
 `npm run check` checks browser types. `npm test` builds the application and runs
 controlled browser checks without live provider calls by default. Install a
@@ -109,5 +110,5 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 | [Operations](docs/OPERATIONS.md) | Static hosting, updates, backups, and recovery |
 | [Validation](docs/VALIDATION.md) | Automated evidence, user-reported phone checks, and remaining gaps |
 | [Roadmap](docs/ROADMAP.md) | Phone acceptance, planned local encryption, and complete log export |
-| [Releasing](docs/RELEASING.md) | Browser CI, security gates, and releases without automatic deployment |
+| [Releasing](docs/RELEASING.md) | Browser CI, security gates, releases, and automatic Cloudflare deployment |
 | [Changelog](CHANGELOG.md) | Versioned changes and release notes |
