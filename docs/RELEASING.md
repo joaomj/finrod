@@ -51,8 +51,9 @@ requests, use optional notes to explain important changes and known limitations.
 
 Do not publish the GitHub release first: the tag push is the trigger, and
 publication follows the release gates. Cloudflare deployment follows publication.
-This workflow accepts stable three-part versions, not prerelease tags. Rerunning a successful tag workflow
-recognizes its existing published release rather than creating a duplicate.
+This workflow accepts stable three-part versions, not prerelease tags. Rerunning
+a successful tag workflow recognizes its existing published release rather than
+creating a duplicate.
 
 Never move a published tag to different code. Fix code failures in a new commit
 and version. A transient infrastructure failure can be retried on the same tag.
@@ -67,6 +68,15 @@ bypassing the workflow or publishing a release manually.
 `.github/workflows/deploy-cloudflare.yml` deploys to
 **https://finrod-preview.pages.dev**. It accepts completed release workflows,
 published-release events, and a manual dispatch for an existing release.
+
+The active flow is:
+
+**Version tag → release checks → GitHub release → Cloudflare upload → hosted-file verification.**
+
+Automation was added after `v0.2.0` was published. The existing tag and original
+release notes remain unchanged. A GitHub-hosted run deployed and verified that
+release through the new workflow. See [Validation](VALIDATION.md#github-hosted-deployment-2026-10-12)
+for the observed result.
 
 GitHub does not trigger a new release-event workflow when another workflow
 publishes with `GITHUB_TOKEN`. The `workflow_run` trigger handles that path after
@@ -94,8 +104,19 @@ after upload does not perform an automatic rollback.
 
 To retry deployment after correcting an infrastructure problem, dispatch the
 workflow with the latest published tag. Retry uses the same release commit;
-it does not move the tag or publish a new release. An intentional rollback to
-an older version requires a separate decision.
+it does not move the tag or publish a new release. After retry approval, use
+GitHub Actions → **Deploy published release to Cloudflare** → **Run workflow**.
+Select `master` and enter the latest published tag in `release_tag`.
+
+The equivalent command for the current release is:
+
+```sh
+gh workflow run deploy-cloudflare.yml --repo joaomj/finrod --ref master -f release_tag=v0.2.0
+```
+
+Use the latest published tag for a future retry. Inspect the new run's result;
+GitHub accepting the dispatch does not prove deployment success. An intentional
+rollback to an older version requires a separate decision.
 
 Keep the stable origin and export history before storage migrations or rollback.
 See [Operations](OPERATIONS.md). Do not claim that an older application can read

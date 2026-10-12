@@ -79,7 +79,7 @@ is recorded below.
 
 ## Cloudflare release alignment
 
-Cloudflare production deployment `70acc90a` records the `v0.2.0` commit
+The initial manual Cloudflare deployment `70acc90a` recorded the `v0.2.0` commit
 `46fd1348611b45f9ca67c513e68eef778c6b2fa2`. All 23 static assets at
 **https://finrod-preview.pages.dev** matched the release build over HTTPS.
 This check made no model or research requests. The stable origin did not change.
@@ -88,5 +88,21 @@ The deployment workflows passed actionlint `1.7.12`. The release-selection scrip
 verified the real published `v0.2.0` tag, its commit, and successful release gates
 through the GitHub API. The hosted-file verifier matched all 23 release assets,
 including Cloudflare's canonical homepage at `/`. These were read-only checks.
-A GitHub-hosted deployment using the new workflow remains unverified until the
-workflow is merged and activated.
+### GitHub-hosted deployment: 2026-10-12
+
+After the automation merged into `master`,
+[deployment run 38202378716](https://github.com/joaomj/finrod/actions/runs/38202378716)
+completed successfully for the existing `v0.2.0` release. The run verified the
+published tag and its release gates, checked out commit
+`46fd1348611b45f9ca67c513e68eef778c6b2fa2`, built locked assets, uploaded them with
+GitHub-stored credentials, and verified all 23 files at the stable HTTPS origin.
+
+Read-only Cloudflare inspection confirmed production deployment `71458c48`,
+with status `success`, the same release commit, and message `Finrod v0.2.0`.
+The workflow controls came from the merged automation revision, not from a moved
+release tag. No new release, tag, DNS change, or browser-data migration was needed.
+
+This verifies the GitHub-to-Cloudflare job through manual dispatch. The automation
+is active for future published, checked stable releases. The first deployment
+triggered by a new release publication has not yet been observed. These deployment
+checks do not close the remaining phone acceptance gaps.

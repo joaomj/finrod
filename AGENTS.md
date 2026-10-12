@@ -19,6 +19,15 @@ New delivery channels require explicit product approval.
 Keep browser conversations and saved credentials local by default.
 Static hosting distributes application files only; external inference and research remain separate privacy boundaries.
 
+## Release delivery
+
+Published, checked stable GitHub releases automatically deploy to the existing `finrod-preview` Cloudflare Pages project.
+Keep `https://finrod-preview.pages.dev` stable so browser history and credentials stay on the same origin.
+Do not deploy ordinary commits, PRs, older releases, drafts, or prereleases to production.
+Creating or pushing release tags and publishing releases still require explicit user approval.
+Manual uploads, retries, DNS changes, and changes to another host require separate approval.
+Read `docs/RELEASING.md`, `docs/OPERATIONS.md`, and `docs/VALIDATION.md` for the active flow and its evidence.
+
 ## Implementation choices
 
 Pi stays behind the chat interface. Its capabilities make functionality integration easier through extensions and Model Context Protocol (MCP) support.

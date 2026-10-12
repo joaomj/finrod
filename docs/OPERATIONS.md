@@ -29,6 +29,30 @@ hosted assets after upload. It does not deploy ordinary commits or PRs.
 Other hosting changes and manual uploads require separate approval. See
 [Releasing](RELEASING.md#automatic-cloudflare-deployment) for credentials and gates.
 
+## Deployment credentials
+
+The repository uses two GitHub Actions secrets:
+
+- `CLOUDFLARE_API_TOKEN`: a token with Pages Read/Edit access to the hosting account.
+- `CLOUDFLARE_ACCOUNT_ID`: the account containing `finrod-preview`.
+
+In Cloudflare, open **Account API tokens** and create a custom token. Under
+**Developer Platform → Pages**, select **Read** and **Edit**. Restrict access to
+the hosting account. Other Pages products, DNS, and Workers permissions are not
+needed. The token can manage Pages within that account; it is not restricted to
+one Pages project.
+
+Save the values under GitHub **Settings → Secrets and variables → Actions →
+Repository secrets**. Keep token values out of chat, shell history, Git, application
+files, and diagnostic exports. Do not save model or research credentials there.
+
+The secrets are configured, and the GitHub-hosted upload has succeeded.
+See [Validation](VALIDATION.md#github-hosted-deployment-2026-10-12) for evidence.
+Rotate an expired or revoked token by replacing the repository secret. After
+approval, retry the latest published release through the
+[deployment procedure](RELEASING.md#automatic-cloudflare-deployment). Secret
+replacement alone does not upload files.
+
 ## Updates
 
 1. Export current chats before changing an installation or storage format.
