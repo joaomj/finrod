@@ -14,8 +14,16 @@
 <body>
   <main class="app">
     <header class="app-header">
-      <h1>Finrod</h1>
-      <button id="settings-open" class="quiet-button" type="button" aria-haspopup="dialog">Settings</button>
+      <div class="header-start">
+        <button id="chats-open" class="quiet-button sidebar-toggle" type="button" aria-label="Open chats" aria-haspopup="dialog" aria-expanded="false" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <h1 id="chat-title">Finrod</h1>
+      </div>
+      <div class="header-actions">
+        <button id="new-chat" class="quiet-button" type="button" disabled>New chat</button>
+        <button id="settings-open" class="quiet-button" type="button" aria-haspopup="dialog">Settings</button>
+      </div>
     </header>
     <div class="transcript-wrap">
       <section id="history" aria-label="Conversation" tabindex="0">
@@ -43,6 +51,14 @@
       <button id="connect" class="connection-hint quiet-button" type="button" hidden>Add your OpenRouter key in Settings to start</button>
     </footer>
   </main>
+  <dialog id="sidebar" class="sidebar" aria-labelledby="sidebar-title">
+    <div class="settings-header">
+      <h2 id="sidebar-title">Chats</h2>
+      <button id="chats-close" class="quiet-button" type="button">Close</button>
+    </div>
+    <button id="sidebar-new-chat" class="secondary-button" type="button" disabled>New chat</button>
+    <nav id="chat-list" aria-label="Saved conversations"></nav>
+  </dialog>
   <dialog id="settings" aria-labelledby="settings-title">
     <div class="settings-header">
       <h2 id="settings-title">Settings</h2>
@@ -52,13 +68,14 @@
       <section class="settings-section">
         <label for="provider-key">OpenRouter API key</label>
         <input id="provider-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Enter a spending-limited key">
-        <p class="muted">Not saved. Enter it again after reloading. Requests go directly to OpenRouter and may incur charges.</p>
+        <p class="muted">Select Done to save in this browser. Use a spending-limited key. Requests go directly to OpenRouter and may incur charges.</p>
+        <div class="settings-actions"><button id="forget-key" class="secondary-button" type="button" disabled>Forget key</button></div>
       </section>
       <section class="settings-section">
         <h3>History</h3>
-        <p class="muted">Saved in this browser only. Keep an external backup: clearing site data removes your history. Backups are not encrypted.</p>
-        <div class="backup-actions">
-          <button id="export" class="secondary-button" type="button" disabled>Export history</button>
+        <p class="muted">All chats are saved in this browser only. Keep an external backup: clearing site data removes your history. Backups are not encrypted.</p>
+        <div class="settings-actions">
+          <button id="export" class="secondary-button" type="button" disabled>Export all chats</button>
           <button id="restore-open" class="secondary-button" type="button" disabled>Restore backup</button>
           <input id="restore" type="file" accept="application/json,.json" hidden disabled>
         </div>
@@ -66,8 +83,8 @@
       <details class="privacy">
         <summary>About your data</summary>
         <p>Model: <span id="model"></span>. OpenRouter and its selected model provider receive your conversation context.</p>
-        <p>Exa receives search queries and requested URLs. Its keyless access has rate limits. There is no Finrod conversation backend or automatic request replay.</p>
-        <p>Your key stays in this open page. Local history is not application-encrypted. Device access and website updates remain trust boundaries.</p>
+        <p>Exa receives search queries and requested URLs. Its keyless access has rate limits. Each new chat uses one small extra model request to generate its title. There is no Finrod conversation backend or automatic request replay.</p>
+        <p>Your key is stored in this browser until you forget it. The key and history are not application-encrypted. Anyone with access to this browser profile or malicious website updates could read them.</p>
       </details>
       <p id="settings-status" role="status" aria-live="polite" hidden></p>
       <button id="settings-done" class="primary-button" type="submit">Done</button>

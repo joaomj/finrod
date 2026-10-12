@@ -9,7 +9,9 @@ scope rather than introducing new capabilities or a second product plan.
 
 ## Purpose and user
 
-Finrod is self-hosted software. It helps one person think through questions,
+Finrod is a self-hosted AI chat companion, not a coding platform. The target
+experience is close to ChatGPT's core chat experience, without its additional
+product surfaces. It helps one person think through questions,
 research subjects, and return to unfinished discussions through Telegram text and voice. The user should not
 need to reconstruct context after restarting the service or maintain a separate
 knowledge application to preserve a useful topic.
@@ -24,9 +26,12 @@ but distinct responsibilities.
   credentials, data, access, backups, retention, and upgrades. No central Finrod
   account or project-operated conversation backend is required. External model,
   transcription, search, and Telegram services retain their own privacy boundaries.
-- **Pi is the engine.** Reuse Pi Durable for conversation execution, context
-  management, tools, and recovery. Inspect existing Pi behavior and the integration
-  before adding capabilities. Do not build another agent or plugin framework.
+- **Conversation is the product.** Keep the experience focused on chat. Do not
+  add Dots, Projects, Codex, Work, or coding-platform surfaces.
+- **Product features define requirements.** Pi is an implementation choice, not
+  a product requirement. The current server uses Pi Durable for conversation
+  execution, context management, tools, and recovery. Reuse existing capabilities
+  instead of building a duplicate agent or plugin framework.
 - **The user directs memory.** Change saved knowledge only on explicit request.
   Keep topics inspectable and portable as Markdown.
 - **External sources stay read-only.** Do not expose shell, coding, or unrestricted
@@ -69,7 +74,19 @@ requirements. See [Architecture](ARCHITECTURE.md) for configuration and defaults
   not trigger automatic training, prompt edits, or knowledge changes.
 - Provider privacy policies, local storage, logs, and backups are separate boundaries.
 
-## Next steps, in order
+## Delivery priority
+
+Prioritize the browser experience described in [Phone PRD](PHONE-PRD.md).
+Keep the existing Telegram installation working without expanding its feature scope.
+Necessary maintenance and security fixes remain in scope. The browser does not
+need Telegram feature parity before acceptance.
+
+Consider Telegram retirement after daily browser use demonstrates comfort and
+reliability. Retirement remains undecided. Preserve the existing installation
+and its data. The checks below concern the existing server release; they do not
+replace the browser priority or its phone release gate.
+
+## Next steps for the existing server release
 
 ### 1. Close the remaining knowledge and answer-quality gaps
 

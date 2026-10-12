@@ -10,6 +10,8 @@ Telegram runtime or its single-owner boundary.
 ## Purpose and user
 
 Each person runs an independent Finrod instance entirely on their phone.
+Finrod is an AI chat companion, not a coding platform. The target experience
+is close to ChatGPT's core chat experience, without its additional product surfaces.
 Finrod supports conversation and web research without a personal computer,
 VPS, or Finrod backend. External model and tool services still require network
 access. Phone-local operation is not offline operation.
@@ -26,12 +28,13 @@ the same website do not share a conversation, account, or local database.
 
 - **Conversation is the product.** Use a minimal, dark-only chat interface.
   Keep credentials and backup controls in Settings. Web research supports the
-  conversation; it is not a general-purpose agent interface. Do not add task
-  dashboards, workspace panels, or agent controls.
+  conversation; it is not a general-purpose agent interface. Do not add Dots,
+  Projects, Codex, Work, task dashboards, workspace panels, or coding-platform controls.
 - **Execution stays on the phone.** Run the assistant and tool orchestration in
   the browser. A static website distributes application files only.
-- **Pi supplies the agent engine.** Use `@earendil-works/pi-agent-core` and Pi AI.
-  Do not implement a second model or tool execution loop.
+- **Product features define requirements.** Pi is an implementation choice,
+  not a product requirement. The current runtime uses `@earendil-works/pi-agent-core`
+  and Pi AI. Reuse that runtime instead of duplicating its model or tool execution loop.
 - **Use only necessary machinery.** Avoid persistent task scheduling, subagents,
   task graphs, codemode, dynamic tool search, and a general plugin framework in
   the initial version.
@@ -44,6 +47,11 @@ the same website do not share a conversation, account, or local database.
   remains open and visible. Unattended background operation is not required.
 
 ## Approved runtime decision
+
+This decision describes the selected implementation, not a permanent requirement
+to use Pi. Pi makes functionality integration easier through extensions and Model
+Context Protocol (MCP) support. Evaluate runtime changes against product features,
+privacy, reliability, and maintenance cost.
 
 Replace Pi Durable in the phone version with `@earendil-works/pi-agent-core`.
 Keep Pi Durable in the existing Telegram/server version.
@@ -79,12 +87,14 @@ Do not add that machinery for hypothetical future features.
 | Web research | Search and retrieve pages through Exa MCP. Return source links and distinguish retrieved evidence from unsupported claims. |
 | Date-aware questions | Supply the device's current date and timezone so relative dates have an explicit reference. Treat the device clock as a reference, not verified external time. |
 | Local continuity | Restore saved history and usable model context after closing and reopening the browser. Re-enter credentials when required. |
-| Chat-first interface | Show one dark-only conversation, formatted answers, source links, an expanding composer, and compact research activity. Respect the reader when they scroll away from new output. |
+| Chat-first interface | Show a dark-only chat view, New chat, a hidden-by-default sidebar, formatted answers, source links, an expanding composer, and compact research activity. Respect the reader when they scroll away from new output. |
+| Separate conversations | Assign sequential session IDs and isolate each chat's model context. Preserve the current conversation during migration. Keep the provider key shared within this browser. |
+| Conversation titles | After a new chat's first successful reply, make one small tool-free model request for its title. Do not block chatting, add the title exchange to model context, or automatically retry failed titles. |
 | Visible progress | Stream replies and periodically persist partial progress. Identify restored partial replies as incomplete. |
 | Safe interruption | Cancel active work when the page becomes hidden where cancellation is possible. On reopening, mark unfinished work interrupted without automatically replaying model or tool requests. |
 | Reliable persistence | Save input before starting paid work. Save finalized assistant and tool messages before continuing the model/tool loop. Report saving failures and block unsafe continuation. |
-| One history writer | Prevent concurrent pages from writing the same local conversation. Explain how to release the conflict. |
-| Recoverable data | Export history to a user-controlled file and restore it into a local instance, without a required cloud backup. |
+| One history writer | Permit one page to write this browser's chat library. Explain how to release the conflict. |
+| Recoverable data | Export all chats, IDs, and titles to a user-controlled file and restore them into a local instance, without a required cloud backup. Preserve the saved provider key separately. |
 | Existing-data preservation | Preserve the prototype's saved conversation during the runtime migration. Do not reset browser data as an installation step. |
 | Independent users | Verify separate local history and credentials for each person's browser installation. No automatic cross-device synchronization is required. |
 
@@ -130,10 +140,13 @@ bypass browser restrictions without a separate product decision.
 
 ## Privacy, credentials, and hosting
 
-The approved initial credential behavior keeps the OpenRouter key in page
-memory. Users enter it again after reload or reopening. Stored credentials are
-not an initial requirement. Any optional personal tool key must have an explicit
-storage policy; do not silently persist it.
+The approved credential behavior saves the OpenRouter key locally after the user
+selects Done in Settings. Restore it after reload or reopening. Store it in
+localStorage, separate from the IndexedDB conversation records. Provide a
+**Forget key** control that removes the saved key without changing history.
+History export and restore must not include or replace the key. Explain that the
+saved key is not application-encrypted and recommend a spending-limited key.
+Any optional personal tool key must have an explicit storage policy.
 
 OpenRouter and its selected inference provider receive submitted model context.
 Exa receives tool queries and requested URLs. These services have separate
@@ -170,9 +183,12 @@ The original Durable prototype was exercised manually in desktop Brave: the
 user reported a model conversation and history surviving close/reopen.
 
 The new implementation passes server typechecking and browser typechecking and
-bundling. Three controlled browser scenarios cover real legacy database
-migration, research, reopen, export/restore, writer locking, interrupted tool
-recovery, storage failure, provider failure, and credential redaction.
+bundling. The same three controlled browser scenarios cover real legacy database
+migration, research, separate chat context, sequential IDs, delayed titles,
+reopen, all-chat export/restore, writer locking, interrupted tool recovery,
+storage failure, conversation and title failure, and credential redaction.
+No additional test cases were added. An isolated previous-version database
+migration preserved all 22 stored records and its original recovery copy.
 
 Live desktop Brave checks confirm direct native MCP search and a complete Haiku
 research conversation through OpenRouter and Exa, with a cited source.

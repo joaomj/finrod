@@ -1,26 +1,32 @@
 import { Agent } from "@earendil-works/pi-agent-core";
-import { createModels } from "@earendil-works/pi-ai/models";
-import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
 import { recoverHistory, type SavedMessage } from "./history.js";
 import { openHistory } from "./storage.js";
+import { rateable, type Feedback, type Vote } from "./feedback.js";
 import { openExa } from "./mcp.js";
+import { openBrowserModel } from "./model.js";
+import { generateTitle } from "./titles.js";
+import { parseLibrary, recoverLibrary, type SessionList } from "./sessions.js";
 
-export const MODEL = "anthropic/claude-haiku-5.5";
-export type ChatMessage = { role: "user" | "assistant" | "tool"; text: string; partial: boolean; toolName?: string; error?: string };
+export type ChatMessage = { message_index: number; rateable: boolean; feedback?: Feedback; role: "user" | "assistant" | "tool"; text: string; partial: boolean; toolName?: string; error?: string };
 
-function displayed(message: SavedMessage, partial = false): ChatMessage[] {
-  if (message.role === "user") return [{ role: "user", text: typeof message.content === "string" ? message.content : message.content.map(block => block.type === "text" ? block.text : "").join("\n"), partial }];
-  if (message.role === "toolResult") return [{ role: "tool", text: `${message.toolName}: ${message.isError ? "failed or interrupted" : "completed"}`, partial: false, toolName: message.toolName,
+function displayed(message: SavedMessage, index: number, feedback?: Feedback, partial = false): ChatMessage[] {
+  const identity = { message_index: index, rateable: !partial && rateable(message), ...(feedback ? { feedback } : {}) };
+  if (message.role === "user") return [{ ...identity, role: "user", text: typeof message.content === "string" ? message.content : message.content.map(block => block.type === "text" ? block.text : "").join("\n"), partial }];
+  if (message.role === "toolResult") return [{ ...identity, role: "tool", text: `${message.toolName}: ${message.isError ? "failed or interrupted" : "completed"}`, partial: false, toolName: message.toolName,
     ...(message.isError ? { error: message.content.map(block => block.type === "text" ? block.text : "").join("\n") } : {}) }];
   const text = message.content.filter(block => block.type === "text").map(block => block.text).join("\n");
   const error = message.stopReason === "error" || message.stopReason === "aborted" ? message.errorMessage ?? "Answer interrupted or failed; it is incomplete." : undefined;
-  return text || error ? [{ role: "assistant", text, partial, ...(error ? { error } : {}) }] : [];
+  return text || error ? [{ ...identity, role: "assistant", text, partial, ...(error ? { error } : {}) }] : [];
 }
 
 export async function openBrowserAssistant(render: (messages: ChatMessage[]) => void,
-  report: (message: string, state?: "error" | "working" | "ready") => void) {
+  report: (message: string, state?: "error" | "working" | "ready") => void,
+  onSessions: (sessions: SessionList, reset?: boolean) => void) {
   const store = await openHistory();
-  let history = store.history;
+  let current = store.active();
+  let history = current.history;
+  const titles = new Map<number, { controller: AbortController; promise: Promise<void> }>();
+  const refreshSessions = (reset = false) => onSessions(store.summaries(), reset);
   let agent: Agent | undefined;
   let operation: AbortController | undefined;
   let interrupted = false;
@@ -29,39 +35,39 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
     const text = error instanceof Error ? error.message : String(error);
     return key ? text.split(key).join("[redacted]") : text;
   };
-  const refresh = () => render([...history.messages.flatMap(message => displayed(message)), ...(history.partial ? displayed(history.partial, true) : [])]);
+  const refresh = () => render([...history.messages.flatMap((message, index) => displayed(message, index, current.feedback.find(entry => entry.message_index === index))), ...(history.partial ? displayed(history.partial, history.messages.length, undefined, true) : [])]);
   const persist = async (replace = false) => {
-    // Provider error strings must not copy the session credential into history or backups.
+    // Provider error strings must not copy the credential into history or backups.
     if (key) history = JSON.parse(JSON.stringify(history, (_name, value) => typeof value === "string" ? value.split(key).join("[redacted]") : value));
-    try { await store.save(history, replace); }
+    try { await store.save(current.session_id, history, replace); refreshSessions(); }
     catch (error) { agent?.abort(); operation?.abort(); throw error; }
   };
+  try { openBrowserModel(""); } catch (error) { await store.close(); throw error; }
+  refreshSessions();
   refresh();
-  const provider = openrouterProvider();
-  const models = createModels({ authContext: { env: async () => undefined, fileExists: async () => false } });
-  const browserModels = () => provider.getModels().map(model => model.id === MODEL
-    ? { ...model, api: "openai-completions" as const, baseUrl: "https://openrouter.ai/api/v1", compat: {} }
-    : model);
-  models.setProvider({ ...provider, getModels: browserModels, getAllModels: browserModels,
-    auth: { apiKey: { name: "OpenRouter session key", resolve: async () => key ? { auth: { apiKey: key } } : undefined } } });
-  const model = models.getModel("openrouter", MODEL);
-  if (!model) { await store.close(); throw new Error(`Browser model ${MODEL} is absent from the pinned Pi catalog.`); }
+  const activate = () => {
+    current = store.active();
+    history = current.history;
+    refreshSessions(true);
+    refresh();
+  };
 
   return {
-    interrupted: history.status === "interrupted",
-    failed: history.status === "failed",
+    get interrupted() { return history.status === "interrupted"; },
+    get failed() { return history.status === "failed"; },
     migrated: store.migrated,
-    async send(text: string, sessionKey: string) {
+    async send(text: string, apiKey: string) {
       store.check();
       if (operation) throw new Error("Finrod is already answering.");
-      if (!sessionKey.trim()) throw new Error("Enter your own OpenRouter API key. It is used only while this page is open.");
+      if (!apiKey.trim()) throw new Error("Add your own OpenRouter API key in Settings.");
       if (!text.trim() || text.length > 20_000) throw new Error("Enter a message of at most 20,000 characters.");
       if (document.visibilityState === "hidden") throw new Error("Keep Finrod visible while sending a message.");
-      key = sessionKey.trim();
+      key = apiKey.trim();
       operation = new AbortController();
       interrupted = false;
       let exa: Awaited<ReturnType<typeof openExa>> | undefined;
       try {
+        const { models, model } = openBrowserModel(apiKey);
         report("Connecting…", "working");
         exa = await openExa(operation.signal);
         if (operation.signal.aborted || document.hidden) throw new Error("Request interrupted before it started.");
@@ -109,30 +115,79 @@ export async function openBrowserAssistant(render: (messages: ChatMessage[]) => 
       } finally {
         operation = undefined;
         agent = undefined;
+        key = "";
         if (exa) await exa.close();
       }
     },
     async interrupt() {
-      if (!operation) return;
+      for (const title of titles.values()) title.controller.abort();
+      if (!operation || interrupted) return;
       interrupted = true;
       operation.abort();
       agent?.abort();
       history.status = "interrupted";
       await persist();
     },
+    async saveFeedback(index: number, vote: Vote, comment: string, apiKey: string) {
+      const id = current.session_id;
+      const safeComment = apiKey ? comment.split(apiKey).join("[redacted]") : comment;
+      await store.saveFeedback(id, index, vote, safeComment);
+      refreshSessions();
+      refresh();
+    },
     exportHistory() {
       store.check();
       if (operation) throw new Error("Stop the active answer before exporting history.");
-      return JSON.stringify(history, null, 2);
+      return store.exportHistory();
     },
     async restoreHistory(text: string) {
       store.check();
       if (operation) throw new Error("Stop the active answer before restoring history.");
-      const { parseHistory } = await import("./history.js");
-      const restored = recoverHistory(parseHistory(JSON.parse(text)));
-      await store.save(restored, true);
-      history = restored;
-      refresh();
+      const restored = recoverLibrary(parseLibrary(JSON.parse(text)));
+      for (const title of titles.values()) title.controller.abort();
+      await Promise.all([...titles.values()].map(title => title.promise));
+      await store.restore(restored);
+      activate();
+    },
+    async newChat() {
+      store.check();
+      if (operation) throw new Error("Stop the active answer before starting another chat.");
+      await store.newChat();
+      activate();
+    },
+    async selectChat(id: number) {
+      store.check();
+      if (operation) throw new Error("Stop the active answer before switching chats.");
+      await store.select(id);
+      activate();
+    },
+    requestTitle(apiKey: string) {
+      const id = current.session_id;
+      if (current.titleState !== "unrequested" || titles.has(id)) return;
+      const copy = structuredClone(history);
+      const controller = new AbortController();
+      const promise = (async () => {
+        await store.setTitle(id, "New chat", "pending");
+        refreshSessions();
+        let title = "New chat";
+        let error: string | undefined;
+        try {
+          title = await generateTitle(copy, apiKey, controller.signal);
+          controller.signal.throwIfAborted();
+          title = title.split(apiKey).join("[redacted]").slice(0, 80);
+        } catch (cause) {
+          error = (cause instanceof Error ? cause.message : String(cause)).split(apiKey).join("[redacted]");
+          if (controller.signal.aborted) error = "Title generation was interrupted. It was not automatically retried.";
+        }
+        await store.setTitle(id, error ? "New chat" : title, error ? "failed" : "done", error);
+        refreshSessions();
+        if (error && current.session_id === id && !operation) report(`Chat title unavailable: ${error}`);
+      })();
+      titles.set(id, { controller, promise });
+      void promise.then(() => { titles.delete(id); }, error => {
+        titles.delete(id);
+        report(`Could not save the chat title: ${error instanceof Error ? error.message : String(error)}`);
+      });
     },
   };
 }

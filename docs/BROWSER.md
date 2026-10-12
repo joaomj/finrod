@@ -14,7 +14,9 @@ Pi agent-core runs the conversation and tool loop in the browser.
 Requests go directly to OpenRouter and Exa; no Finrod backend processes messages.
 A static website distributes application files only.
 
-The interface is dark-only and contains one conversation. Settings contains
+The interface is dark-only. Select **New chat** to start a separate conversation.
+Open the sidebar with the top-left button to select a saved chat. The sidebar
+starts hidden and closes after selection. Settings contains
 credentials, export, restore, and privacy information. Answers support Markdown
 and clickable source links. Raw HTML cannot execute, links allow only HTTP or
 HTTPS, and model-supplied images do not load. Web research appears in a collapsed
@@ -26,14 +28,40 @@ answer, Stop replaces Send. You can draft another message without submitting it.
 Scrolling up pauses automatic following. Select **Jump to latest** to follow
 new output again. There is no task dashboard or unattended agent operation.
 
+Each chat has a sequential `session_id` and its own model context. IDs belong to
+this browser's history, not to a shared account. Starting a new chat does not send
+messages from other chats. An unused empty chat is reused to avoid duplicate
+blank entries. Selecting a chat restores its saved context. Stop an
+active answer before switching chats. Unsent drafts survive switching during the
+open page, but are not saved across reloads.
+
+New chats start with the title **New chat**. After the first successful reply,
+one small OpenRouter request generates a title from the first successful exchange.
+The request uses the configured model and key, no tools, and bounded text input.
+It does not enter conversation history or block another message or chat switch.
+Title generation adds a small provider charge. A failed or interrupted title
+stays **New chat**, shows an error, and is not automatically retried.
+Migrated conversations use **Previous conversation** without a model request.
+
 Finrod supplies the device's current date and timezone to the model. Exa's
 `web_search_exa` and `web_fetch_exa` tools provide search and page retrieval.
 Source content is untrusted evidence, not an instruction channel.
 
-The OpenRouter key stays in the open page's memory. Enter it again after reloading
-or closing the page. Use a personal key with a spending limit. Do not embed a
-shared operator key in the website. Provider error strings are redacted before
-saving history or exporting backups.
+In **Settings**, enter the OpenRouter key and select **Done** to save it in this
+browser. Finrod restores the key after reload or reopening. Select **Forget key**
+to remove it without changing conversation history. Closing Settings without
+selecting Done discards key edits.
+
+The key uses localStorage under `finrod.openrouter-key`, separate from the
+IndexedDB conversation records. History export and restore do not include or
+replace the key. Clearing site data removes both history and the saved key.
+Use a personal key with a spending limit. Do not embed a shared operator key in
+the website. Provider error strings are redacted before saving history or
+exporting backups.
+
+The saved key is not application-encrypted. Anyone with access to this browser
+profile or malicious website updates could read it. Private browsing does not
+provide storage that survives the end of the private session.
 
 OpenRouter and its selected inference provider receive submitted conversation
 context. Exa receives search queries and requested URLs. Their charges, retention
@@ -79,6 +107,10 @@ The development server does not provide TLS or authentication.
 
 ## Storage, migration, and recovery
 
+Normal operation uses IndexedDB database `finrod-browser`, version 3.
+The `sessions` store contains chat metadata, partial replies, and turn status.
+The `chatMessages` store uses keys `[session_id, message_index]` for completed
+records. The `library` store tracks the active chat and the next sequential ID.
 Normal operation stores messages directly in IndexedDB. Completed messages are
 appended as individual records; partial replies and turn status are stored
 separately. User input is saved before inference. Final assistant and tool
@@ -91,7 +123,10 @@ partial history replacement. A browser lock permits one page to own the history.
 A second page reports the conflict instead of opening another writer.
 The browser needs Web Locks, IndexedDB, and `AbortSignal.any` in a secure context.
 
-Existing Durable prototype history migrates automatically on first open.
+Both earlier browser formats migrate automatically into session 1 on first open.
+The previous IndexedDB `messages` and `history` stores remain untouched as a
+recovery copy. The multi-chat runtime does not write them.
+Existing Durable prototype history also migrates automatically on first open.
 Only this migration loads the old Durable/sql.js code and SQLite WebAssembly.
 The original snapshot remains untouched in IndexedDB as a recovery copy.
 Normal agent execution does not use Durable, Chord, or SQLite.
@@ -109,13 +144,17 @@ expected adaptation. The server's third-party MCP adapter remains unchanged.
 
 ## Export and restore
 
-In **Settings**, select **Export history** to download `finrod-history.json`.
+In **Settings**, select **Export all chats** to download `finrod-history.json`.
+The version 2 backup includes all chats, IDs, titles, and the active selection.
 Keep this file private: it includes conversation and tool content and is not encrypted.
 The configured provider key is not included. Export is unavailable during a turn.
 
 In **Settings**, select **Restore backup**, choose a file, and confirm replacement.
-Export current history first if you need to retain it. Finrod validates the supported backup
-format before replacement; invalid files leave current history unchanged.
+Restore replaces all chats, not only the active chat. Export current history
+first if you need to retain it. Finrod validates the supported backup format
+before replacement; invalid files leave current history unchanged. Earlier
+single-chat version 1 backups restore as one conversation. Restoring an older
+backup does not lower this browser's ID counter.
 Restored unfinished work is marked interrupted. Restore does not start a request.
 
 Local history is not application-encrypted. Device access, browser access, the
@@ -129,9 +168,11 @@ including the retained migration snapshot. Keep an external backup.
 scenarios with controlled provider responses. They cover:
 
 - Migration from a database written by the real Durable storage implementation,
-  research, reopening, the single-page lock, and export/restore.
+  research, context isolation, sequential IDs, delayed titles across chat switches,
+  reopening, the single-page lock, all-chat export/restore, and saved-key removal.
 - Interrupted tool recovery, absence of automatic replay, and valid next-turn context.
-- Storage failure before paid work, provider failures, and credential redaction.
+- Storage failure before paid work, conversation and title failures, absence of
+  title retries, and credential redaction.
 
 The checks use desktop Brave when `/usr/bin/brave-browser` exists, or Playwright's
 installed Chromium otherwise. Set `FINROD_TEST_BROWSER` to select another Chromium
@@ -148,10 +189,17 @@ controlled scenarios, and both live browser checks. The live model completed a
 research turn and cited a source. A provider-error credential leak found during
 verification was repaired and its regression check passes.
 
-The dark chat interface passes the same three controlled scenarios. No new test
+The multi-chat interface passes the same three controlled scenarios. No new test
 cases were added. A separate desktop Brave walkthrough checked desktop and
 phone-sized layouts, Markdown, safe links, image suppression, and scroll
 navigation. Reduced viewport height was checked without a real phone keyboard.
+An isolated previous-version database preserved all 22 conversation records and
+its original recovery copy during migration. A phone-sized sidebar walkthrough
+and persistent-profile restarts confirmed saved-key restoration and removal.
+Brave restored duplicate tabs during one restart; closing the extra isolated tab
+released the expected single-writer conflict. These checks made no live model or
+tool calls. Live checks above describe the earlier runtime verification, not a
+live title-generation check.
 
 Still unverified: actual iPhone behavior, the second user's Chrome phone session,
 phone-only setup, abrupt device termination, and large-history performance.
