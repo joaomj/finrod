@@ -231,3 +231,7 @@ node_modules/
 
 # Generated phone-local browser bundle
 /web-dist/
+
+# Reference clones (ideas only, never built or committed)
+inspiration/*
+!inspiration/.gitkeep
