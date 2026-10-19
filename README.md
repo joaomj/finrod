@@ -1,77 +1,51 @@
 # Finrod
 
-### An AI chat companion that runs in your browser.
+### A personal AI assistant that lives on your home server.
 
-Talk through an idea. Research a question. Return to your saved conversations.
-Finrod provides a simple, dark chat interface with separate chats, streamed
-answers, source links, and local feedback. No central Finrod account or
-conversation backend is required.
+Finrod runs on a home server and talks through Telegram: one shared bot, a
+separate Finrod for each person, with separate memory, history, and
+credentials. Models stay interchangeable, memory stays in files you own, and
+nothing about the assistant belongs to a vendor.
 
-The browser runs the assistant and stores your chats on your device. OpenRouter
-provides model inference; Exa provides web research. Static hosting distributes
-application files only. Local execution is not offline operation.
+**Status:** v0.3.0 is agreed but not implemented. The v0.2.0 browser chat is
+retired; its history was test data and there is no migration.
 
-**[Try Finrod](https://finrod-preview.pages.dev)** · **[Quick start](#quick-start)** · **[Why Finrod?](#why-finrod)** · **[Documentation](#documentation)**
+**[Roadmap](docs/ROADMAP.md)** · **[v0.3.0 requirements](docs/PRD-v030.md)** · **[Documentation](#documentation)**
 
-## Quick start
+## Where Finrod is going
 
-1. Open **https://finrod-preview.pages.dev** in a normal browser window.
-2. Open **Settings** and enter your personal OpenRouter API key.
-3. Optionally enter a personal Exa API key for research using your Exa account.
-4. Select **Done**, then send a message.
+| Phase | Document | State |
+| --- | --- | --- |
+| v0.3.0 Telegram assistant | [PRD-v030.md](docs/PRD-v030.md) | Agreed, not implemented |
+| V2 connectors (MCP, OAuth, approval-gated writes) | [V2-CONNECTORS.md](docs/V2-CONNECTORS.md) | Sketch |
+| V3 memory (portable second brain) | [V3-MEMORY.md](docs/V3-MEMORY.md) | Sketch, intentionally imprecise |
 
-The initial model is `anthropic/claude-haiku-5.5`. Blank Exa credentials use free,
-rate-limited access. Personal keys use your provider accounts and can incur
-charges. Use spending-limited keys.
+## v0.2.0 browser (retired)
 
-Finrod saves keys separately from chat history and restores them on reopening.
-**Forget key** and **Forget Exa key** remove the respective saved credentials
-without changing chats. Neither history export nor restore includes saved keys.
+The v0.2.0 chat ran entirely in the phone browser with OpenRouter inference
+and Exa research. It is retired in favor of the server product. Its history
+was test data and there is no migration.
 
-## Usage and limits
+## v0.3.0 setup (not implemented yet)
 
-- Select **New chat** for a separate conversation.
-- Open the sidebar to return to a saved chat.
-- Ask for web research with source links. Failed research remains visible.
-- Select **Stop** to interrupt an answer. Keep Finrod visible during a request.
-- Rate answers locally. A negative vote can include an optional comment.
-- In **Settings**, select **Export all chats** to make a private backup.
-- Use **Restore backup** to replace the local chat library after confirmation.
+Setup will mean: one Finrod process per person on the home server, one shared
+Telegram bot token, and per-profile provider keys. The exact procedure lands
+here once v0.3.0 is built. The agreed requirements are in
+[v0.3.0 requirements](docs/PRD-v030.md).
 
-History belongs to this browser, device, and website origin. There is no automatic
-synchronization. Use the same URL when returning. Avoid private browsing for
-chats you want to retain. Export a backup before clearing site data or changing
-origins. Restore requires separate provider-key setup on a new browser.
+## Privacy boundaries (v0.3.0)
 
-History, keys, and exported backups are not application-encrypted. OpenRouter
-and its inference provider receive submitted context. Exa receives research
-queries and requested URLs. The browser profile, static host, and software updates
-remain trust boundaries. See [privacy and recovery](docs/BROWSER.md).
+Telegram's cloud sees every chat; bot chats are not end-to-end encrypted.
+The transcription provider receives voice clips transiently under zero data
+retention, but keeps usage metadata. The model provider receives submitted
+context. Profiles never share logs, keys, memory, or connectors. Details are
+in [v0.3.0 requirements](docs/PRD-v030.md).
 
-User-reported iPhone/Brave checks confirm conversation, reopening, live research
-with a personal Exa key, and saved-key restoration. Full phone acceptance remains
-open; see [Validation](docs/VALIDATION.md). Voice, imported-source retrieval,
-background work, encryption, and complete execution-log export are not implemented.
+## Retired browser source
 
-## Build and preview locally
-
-Use Node.js `22.22.1` or later and npm. From this checkout, run:
-
-```sh
-npm ci --ignore-scripts --include=dev --no-audit --no-fund
-npm run build
-npm run web:serve
-```
-
-Open `http://127.0.0.1:4173` on the development computer. The development server
-serves only `web-dist/`; it does not proxy conversations or provider requests.
-For phone access, publish the complete `web-dist/` directory on an HTTPS static
-host. Published, checked releases automatically update the existing Cloudflare
-preview; other hosting changes require approval. No credentials belong in the build.
-
-`npm run check` checks browser types. `npm test` builds the application and runs
-controlled browser checks without live provider calls by default. Install a
-Chromium browser as described in [Browser](docs/BROWSER.md#verification).
+The `web/` source and its build (`npm run build`, `npm run web:serve`,
+`npm test`) belong to the retired v0.2.0 product. They remain in the checkout
+as a reference until a separate cleanup decision removes them.
 
 ## Why Finrod?
 
@@ -104,11 +78,14 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 
 | Guide | What you will find |
 | --- | --- |
-| [Product requirements](docs/PRD.md) | Browser outcomes, scope, privacy boundaries, and phone acceptance |
-| [Browser](docs/BROWSER.md) | Chat behavior, local preview, storage migration, and export/restore |
-| [Architecture](docs/ARCHITECTURE.md) | Browser components, provider requests, persistence, and recovery |
-| [Operations](docs/OPERATIONS.md) | Static hosting, updates, backups, and recovery |
-| [Validation](docs/VALIDATION.md) | Automated evidence, user-reported phone checks, and remaining gaps |
-| [Roadmap](docs/ROADMAP.md) | Phone acceptance, planned local encryption, and complete log export |
-| [Releasing](docs/RELEASING.md) | Browser CI, security gates, releases, and automatic Cloudflare deployment |
+| [Roadmap](docs/ROADMAP.md) | Phase index: v0.3.0, V2 connectors, V3 memory |
+| [v0.3.0 requirements](docs/PRD-v030.md) | Telegram assistant outcomes, scope, and privacy boundaries |
+| [V2 connectors](docs/V2-CONNECTORS.md) | Sketch: MCP connectors, OAuth, approval-gated writes |
+| [V3 memory](docs/V3-MEMORY.md) | Sketch: portable second brain |
+| [Product requirements](docs/PRD.md) | Retired v0.2.0 browser outcomes and phone acceptance |
+| [Browser](docs/BROWSER.md) | Retired v0.2.0 chat behavior and export/restore |
+| [Architecture](docs/ARCHITECTURE.md) | Retired v0.2.0 components and persistence |
+| [Operations](docs/OPERATIONS.md) | Retired v0.2.0 hosting, updates, and recovery |
+| [Validation](docs/VALIDATION.md) | v0.2.0 evidence and phone checks |
+| [Releasing](docs/RELEASING.md) | Retired v0.2.0 CI, releases, and Cloudflare deployment |
 | [Changelog](CHANGELOG.md) | Versioned changes and release notes |

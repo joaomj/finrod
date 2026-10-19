@@ -5,6 +5,12 @@ verification evidence and known limits.
 
 ## Unreleased
 
+### Changed
+
+- Finrod direction is now a personal Telegram assistant on the home server (v0.3.0 PRD). The v0.2.0 browser product is retired.
+- Project `AGENTS.md` removed. `docs/ROADMAP.md` is the phase index for v0.3.0, V2 connectors, and V3 memory.
+- Reference clones under `inspiration/` are ignored and never committed.
+
 ### Added
 
 - Automatic Cloudflare Pages deployment for published, checked stable releases.
