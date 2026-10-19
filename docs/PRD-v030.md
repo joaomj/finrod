@@ -43,16 +43,17 @@ memory, history, and credentials.
 
 ## Transcription decision
 
-- V1 uses a zero-data-retention (ZDR) provider for speech to text.
-  Audio transits the provider but is not stored.
-- Groq offers a self-serve ZDR toggle covering audio transcription.
-  OpenAI's transcription endpoint is ZDR-eligible but needs an approval
-  process. Provider selection is open.
-- Usage metadata (timestamps, sizes) is still retained by the provider.
-  Telegram's cloud also sees every chat; Telegram bot chats are not
-  end-to-end encrypted.
-- Local transcription on the mini PC is a later option, not V1 scope.
-  No STT benchmark is needed for V1.
+- V1 transcribes voice locally on the mini PC with faster-whisper `small`
+  (int8, CPU). Audio never leaves home in the normal case.
+- Evidence: [STT eval](STT-EVAL.md) (2026-10-19). Local runs ~2s per clip
+  with accuracy on par with the tested provider. Telegram Opus voice notes
+  decode through the same path; no ffmpeg dependency.
+- Provider transcription is parked. If local proves insufficient in daily
+  use, the first fallback is Groq with its self-serve ZDR toggle (untested).
+  OpenRouter ZDR routing was tested: only `qwen3-asr-0.6b` routes under the
+  zero-retention filter; Deepgram and OpenAI transcribers refuse it.
+- Telegram's cloud still sees every chat; Telegram bot chats are not
+  end-to-end encrypted. This is unchanged.
 
 ## Trust principle
 
