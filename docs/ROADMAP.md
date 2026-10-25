@@ -1,13 +1,13 @@
 # Roadmap
 
-Finrod is a personal AI assistant on the home server, reached through
-Telegram. The project `AGENTS.md` was removed; this file is the phase index.
+Finrod is a personal AI assistant on the home server, used as a web app
+over the tailnet. The project `AGENTS.md` was removed; this file is the phase index.
 
 ## Phases
 
 | Phase | Document | State |
 | --- | --- | --- |
-| v0.3.0 Telegram assistant | [PRD-v030.md](PRD-v030.md) | Agreed, not implemented |
+| v0.3.0 home-server web app | [PRD-v030.md](PRD-v030.md) | Agreed, not implemented |
 | V2 connectors (MCP, OAuth, approval-gated writes) | [V2-CONNECTORS.md](V2-CONNECTORS.md) | Sketch |
 | V3 memory (portable second brain) | [V3-MEMORY.md](V3-MEMORY.md) | Sketch, intentionally imprecise |
 
@@ -21,6 +21,8 @@ server.
 
 The user selects private mode when the matter is sensitive. All other
 traffic uses default mode.
+
+Private mode is not part of v0.3.0. It comes in a later release.
 
 Local operation is the long-term aspiration. Remote remains the default
 until local quality and speed on the home server match it.

@@ -1,6 +1,6 @@
 # V2 sketch: connectors
 
-**Status:** sketch. This file records direction, not requirements. V1 (Telegram chat on the home server) comes first.
+**Status:** sketch. This file records direction, not requirements. V1 (the web app on the home server) comes first.
 
 ## Result
 
@@ -30,5 +30,5 @@ Finrod reaches outside tools through connectors. The maintainer wires each conne
 
 ## Relation to other phases
 
-- V1 provides the Telegram surface and raw logs. V2 adds reach.
+- V1 provides the web app and raw logs. V2 adds reach.
 - V3 (memory) may record which connector supplied which fact.

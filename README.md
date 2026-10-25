@@ -2,10 +2,10 @@
 
 ### A personal AI assistant that lives on your home server.
 
-Finrod runs on a home server and talks through Telegram: one shared bot, a
-separate Finrod for each person, with separate memory, history, and
-credentials. Models stay interchangeable, memory stays in files you own, and
-nothing about the assistant belongs to a vendor.
+Finrod runs on a home server and you open it as a web app on your phone,
+installed on the home screen. It is reachable only over your tailnet. Chats
+and memory stay on the server in files you own, models stay interchangeable,
+and nothing about the assistant belongs to a vendor.
 
 **Status:** v0.3.0 is agreed but not implemented. The v0.2.0 browser chat is
 retired; its history was test data and there is no migration.
@@ -16,7 +16,7 @@ retired; its history was test data and there is no migration.
 
 | Phase | Document | State |
 | --- | --- | --- |
-| v0.3.0 Telegram assistant | [PRD-v030.md](docs/PRD-v030.md) | Agreed, not implemented |
+| v0.3.0 home-server web app | [PRD-v030.md](docs/PRD-v030.md) | Agreed, not implemented |
 | V2 connectors (MCP, OAuth, approval-gated writes) | [V2-CONNECTORS.md](docs/V2-CONNECTORS.md) | Sketch |
 | V3 memory (portable second brain) | [V3-MEMORY.md](docs/V3-MEMORY.md) | Sketch, intentionally imprecise |
 
@@ -28,17 +28,19 @@ was test data and there is no migration.
 
 ## v0.3.0 setup (not implemented yet)
 
-Setup will mean: one Finrod process per person on the home server, one shared
-Telegram bot token, and per-profile provider keys. The exact procedure lands
-here once v0.3.0 is built. The agreed requirements are in
+Setup will mean: one Finrod service on the home server, served over HTTPS
+on the tailnet, an OpenRouter key, and the web app added to the phone home
+screen. The exact procedure lands here once v0.3.0 is built. The agreed requirements are in
 [v0.3.0 requirements](docs/PRD-v030.md).
 
 ## Privacy boundaries (v0.3.0)
 
-Telegram's cloud sees every chat; bot chats are not end-to-end encrypted.
-The transcription provider receives voice clips transiently under zero data
-retention, but keeps usage metadata. The model provider receives submitted
-context. Profiles never share logs, keys, memory, or connectors. Details are
+Finrod has no public address; only tailnet devices reach it, and Tailscale
+encrypts that traffic. Chats, files, and memory stay on the server. Model
+and transcription requests go through OpenRouter to zero-data-retention
+providers only: the provider receives the context and audio of each request
+but does not keep them. Profiles never share logs, keys, memory, or
+connectors. Details are
 in [v0.3.0 requirements](docs/PRD-v030.md).
 
 ## Retired browser source
@@ -79,7 +81,7 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 | Guide | What you will find |
 | --- | --- |
 | [Roadmap](docs/ROADMAP.md) | Phase index: v0.3.0, V2 connectors, V3 memory |
-| [v0.3.0 requirements](docs/PRD-v030.md) | Telegram assistant outcomes, scope, and privacy boundaries |
+| [v0.3.0 requirements](docs/PRD-v030.md) | Home-server web app outcomes, scope, and privacy boundaries |
 | [V2 connectors](docs/V2-CONNECTORS.md) | Sketch: MCP connectors, OAuth, approval-gated writes |
 | [V3 memory](docs/V3-MEMORY.md) | Sketch: portable second brain |
 | [Product requirements](docs/PRD.md) | Retired v0.2.0 browser outcomes and phone acceptance |

@@ -1,8 +1,8 @@
 # STT eval: local faster-whisper small vs OpenRouter transcription
 
-**Date:** 2026-10-19. **Decision:** local-first transcription.
-Provider transcription is parked and returns only if local proves
-insufficient in daily use.
+**Date:** 2026-10-19. **Current decision:** V1 transcribes through
+OpenRouter with the ZDR filter. See [PRD-v030](PRD-v030.md). Local
+transcription is the tested alternative.
 
 ## Method
 
@@ -46,7 +46,7 @@ or speed grounds.
   `metadata_errors="ignore"` to `av.open`, which no longer accepts it.
   Workaround used: decode audio to a float32 array first (PyAV directly),
   then pass the array to `transcribe`. Keep this path: it also decodes
-  Telegram Opus voice notes with no ffmpeg dependency.
+  Opus audio with no ffmpeg dependency.
 - Sample sourcing was brittle: Common Voice is gone from the Hub,
   and `datasets` audio decoding needs torch/torchcodec (CUDA-linked,
   unusable on this CPU box). Fleurs + manual PyAV decode works.
@@ -54,7 +54,7 @@ or speed grounds.
 ## Caveats
 
 - 3 clips of read speech, not spontaneous voice notes. Re-test on real
-  Telegram voice notes once V1 runs daily.
+  voice messages once V1 runs daily.
 - Short-clip behavior only. Long audio was not evaluated.
 
 ## References
