@@ -57,7 +57,7 @@ Chats, files, and memory stay on the server as files the user owns.
 | Text chat | Send a message and receive a streamed answer. |
 | Conversations | Start, reopen, and switch between separate conversations. History loads from the server on any tailnet device. |
 | Voice | Record a pt-BR voice message in the app and receive an answer based on its transcription. Audio and transcript both enter the raw log. |
-| Images and documents | Send photos, screenshots, PDFs, and files. The assistant can see images and read documents. Originals stay in the raw log. |
+| Images and documents | Send photos, screenshots, PDFs, and files. The assistant can see images and read documents. Originals stay in the raw log. A PDF with pages the extraction cannot read produces a visible warning naming those pages. |
 | Web research | The assistant can search the web and cite its sources. |
 | Raw logs | Every profile keeps an append-only log with stable message identifiers. V3 memory cites these identifiers. |
 | Feedback | Each answer has thumbs-up and thumbs-down buttons. Votes are stored with the message they rate. |
@@ -94,6 +94,29 @@ Chats, files, and memory stay on the server as files the user owns.
   Finrod only needs the API key.
 - The provider still receives the context and audio of each request.
 - Finrod sends a request only the context that request needs.
+
+## Attachments decision
+
+- Images go to the model as image content. The default model,
+  `deepseek/deepseek-v4.1-flash-1017`, accepts images (verified
+  2026-10-25 in the OpenRouter catalog).
+- Finrod reaches models through pi-ai 1.4.0, which sends text and image
+  content only. It cannot send a PDF or any other file to a model, even
+  to a model that reads files. Version 1.4.0 is also the newest
+  published version.
+- PDFs and plain text files are therefore converted to text on the
+  server before the model sees them. The conversion runs in Node, so the
+  mini PC installs nothing.
+- A PDF conversion reads the text layer only. Pages that are scanned
+  images convert to nothing. When pages yield no text, the answer
+  states which page ranges could not be read, so a partial reading is
+  never presented as a complete one.
+- Reading the pages that failed as images is a later increment. It
+  needs a page renderer on the mini PC. Hermes Agent, which reads
+  documents the same way, recommends rendering only the unreadable
+  pages and reading them with a vision tool.
+- Originals are stored next to the profile data and referenced by the
+  entry that carries them. A conversion failure keeps the original.
 
 ## Transcription decision
 
