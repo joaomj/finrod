@@ -54,28 +54,25 @@ Chats, files, and memory stay on the server as files the user owns.
 | Access boundary | A device outside the tailnet cannot reach Finrod. |
 | Restart safety | A server reboot loses no committed log entries. An answer cut off by a restart shows as interrupted, not as complete. |
 
-## First validation
-
-Before building on the web app, confirm on the user's iPhone that a
-home-screen web app served over the tailnet can:
-
-1. Install from Safari and open full screen.
-2. Record audio and upload it to the server.
-3. Keep working after the app is closed and reopened.
-
-Voice recording in home-screen web apps has had iOS defects in the past.
-If recording fails, voice input needs a different design before V1 work
-continues.
-
 ## Backend
 
-- The assistant runs on the pi agent loop (`@earendil-works/pi-agent-core`),
-  with MCP tools through `@earendil-works/pi-mcp`. The v0.2.0 browser app
-  used the same libraries.
+- The assistant runs on the durable pi agent harness
+  (`@earendil-works/pi-durable`), with MCP tools through
+  `@earendil-works/pi-mcp`.
+- pi-durable commits every message, model answer, tool call, and partial
+  answer to storage before Finrod shows it. After a restart, unfinished
+  work continues from the last checkpoint. This covers restart safety,
+  the raw log with stable entry identifiers, live streaming to the web
+  app, and duplicate-submission protection.
+- Storage is one SQLite file per profile on the mini PC. Feedback votes
+  and attachments are stored as Finrod entry kinds in the same history.
+- pi-durable is marked experimental and its API changes between releases.
+  Finrod pins an exact version and upgrades deliberately.
 - The agent has only the tools Finrod registers on purpose. It has no
   shell, file-editing, or other general system tools.
-- Finrod builds its own server parts: the web interface, conversation
-  storage, the raw log, profile separation, and approval prompts.
+- Finrod builds its own server parts: the web interface, the HTTP and
+  streaming API, attachment handling, profile separation, and approval
+  prompts.
 
 ## Model and privacy
 
