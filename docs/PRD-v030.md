@@ -97,6 +97,9 @@ Chats, files, and memory stay on the server as files the user owns.
 
 ## Attachments decision
 
+- One file may be up to 20 MB. Accepted files are JPEG, PNG,
+  WebP, PDF, TXT, MD, and CSV; the type is read from the file's first
+  bytes, not from what the browser claims.
 - Images go to the model as image content. The default model,
   `deepseek/deepseek-v4.1-flash-1017`, accepts images (verified
   2026-10-25 in the OpenRouter catalog).
