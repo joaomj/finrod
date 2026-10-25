@@ -35,7 +35,11 @@ const ConversationIndex = defineDoc<{ items: ConversationSummary[] }>({
   checkpointWhen: (_value, _ops, info) => info.deltasSinceBase >= 50,
 });
 
-export type ChatMessage = { id: number; role: "user" | "assistant"; text: string; error?: string };
+export type Vote = "up" | "down";
+export type ChatMessage = { id: number; role: "user" | "assistant"; text: string; error?: string; vote?: Vote };
+/** A thumbs vote on one answer; the newest entry for a target wins, and `vote: null` clears it. */
+const FEEDBACK = "finrod.feedback";
+type FeedbackData = { target: number; vote: Vote | null };
 export type LiveStatus = { busy: boolean; partial?: string; retry?: string; tool?: string };
 
 export class Chat {
@@ -106,6 +110,20 @@ export class Chat {
     return true;
   }
 
+  /**
+   * Store a vote on an answer as a passive entry the model never sees. Returns false when the conversation or the
+   * answer does not exist.
+   */
+  async rate(id: number, target: number, vote: Vote | null): Promise<boolean> {
+    const conversation = await this.harness.conversation(id as ConversationId, context);
+    if (!conversation) return false;
+    const { entries } = await conversation.context(context);
+    if (!entries.some((entry) => entry.id === target && entry.kind === "pi.assistant")) return false;
+    const data: FeedbackData = { target, vote };
+    await conversation.submit({ type: "write", entry: { kind: FEEDBACK, data } }, context);
+    return true;
+  }
+
   /** Follow one conversation; `onView` gets the current view, then every committed change. */
   async watch(id: number, onView: (view: ConversationView) => void): Promise<(() => Promise<unknown>) | undefined> {
     const conversation = await this.harness.conversation(id as ConversationId, context);
@@ -123,6 +141,13 @@ function titleOf(text: string): string {
 }
 
 export function messagesOf(view: ConversationView): ChatMessage[] {
+  const votes = new Map<number, Vote | null>();
+  for (const entry of view.entries) {
+    if (entry.kind === FEEDBACK) {
+      const data = entry.data as FeedbackData;
+      votes.set(data.target, data.vote);
+    }
+  }
   const messages: ChatMessage[] = [];
   for (const entry of view.entries) {
     const message = entry.model?.[0];
@@ -137,7 +162,8 @@ export function messagesOf(view: ConversationView): ChatMessage[] {
             ? "Interrupted."
             : undefined;
       if (!text && !error) continue;
-      messages.push({ id: entry.id, role: "assistant", text, ...(error ? { error } : {}) });
+      const vote = votes.get(entry.id);
+      messages.push({ id: entry.id, role: "assistant", text, ...(error ? { error } : {}), ...(vote ? { vote } : {}) });
     }
   }
   return messages;

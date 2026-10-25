@@ -54,6 +54,11 @@ h1 { margin: 0; font-size: 1rem; font-weight: 600; white-space: nowrap; overflow
 .assistant code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; }
 .assistant table { border-collapse: collapse; display: block; overflow-x: auto; }
 .assistant th, .assistant td { border: 1px solid var(--line); padding: .3rem .6rem; }
+.feedback { display: flex; gap: .25rem; margin-top: .4rem; }
+.feedback button { padding: .3rem; border-radius: .4rem; color: var(--muted); display: flex; }
+.feedback svg { width: 1.05rem; height: 1.05rem; }
+.feedback button[aria-pressed="true"] { color: var(--text); }
+.feedback button[aria-pressed="true"] svg { fill: currentColor; fill-opacity: .25; }
 .error { color: var(--error); font-size: .9rem; }
 .status { color: var(--muted); font-size: .9rem; }
 .empty { margin: auto !important; color: var(--muted); text-align: center; }

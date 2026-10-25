@@ -81,6 +81,13 @@ async function events(request: IncomingMessage, response: ServerResponse, id: nu
 async function api(request: IncomingMessage, response: ServerResponse, path: string) {
   if (path === "/api/conversations" && request.method === "GET") return json(response, 200, await chat.list());
   if (path === "/api/conversations" && request.method === "POST") return json(response, 201, { id: await chat.create() });
+  const vote = /^\/api\/conversations\/(\d+)\/messages\/(\d+)\/vote$/.exec(path);
+  if (vote && request.method === "PUT") {
+    const body = await readJson(request);
+    if (body.vote !== "up" && body.vote !== "down" && body.vote !== null) throw new HttpError(400, 'vote must be "up", "down", or null.');
+    if (!(await chat.rate(Number(vote[1]), Number(vote[2]), body.vote))) throw new HttpError(404, "Answer not found.");
+    return json(response, 200, {});
+  }
   const match = /^\/api\/conversations\/(\d+)\/(messages|events)$/.exec(path);
   if (!match) throw new HttpError(404, "Not found.");
   const id = Number(match[1]);

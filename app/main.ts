@@ -1,7 +1,8 @@
 import MarkdownIt from "markdown-it";
 
 type Summary = { id: number; title: string; updatedAt: number };
-type Message = { id: number; role: "user" | "assistant"; text: string; error?: string };
+type Vote = "up" | "down";
+type Message = { id: number; role: "user" | "assistant"; text: string; error?: string; vote?: Vote };
 type Live = { busy: boolean; partial?: string; retry?: string; tool?: string };
 
 const toolLabels: Record<string, string> = { web_search: "Pesquisando na web…", web_fetch: "Lendo páginas…" };
@@ -70,6 +71,36 @@ function bubble(role: "user" | "assistant", text: string, error?: string) {
   return el;
 }
 
+const thumbs: Record<Vote, { label: string; path: string }> = {
+  up: { label: "Boa resposta", path: "M7 10v11M7 10l4-8a3 3 0 0 1 3 3v4h5a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 17.6 21H7M7 10H4v11h3" },
+  down: { label: "Resposta ruim", path: "M17 14V3M17 14l-4 8a3 3 0 0 1-3-3v-4H5a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 6.4 3H17M17 14h3V3h-3" },
+};
+
+function feedback(message: Message) {
+  const row = document.createElement("div");
+  row.className = "feedback";
+  for (const vote of ["up", "down"] as const) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("aria-label", thumbs[vote].label);
+    button.setAttribute("aria-pressed", String(message.vote === vote));
+    button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${thumbs[vote].path}"/></svg>`;
+    button.addEventListener("click", () => void rate(message, message.vote === vote ? null : vote));
+    row.append(button);
+  }
+  return row;
+}
+
+async function rate(message: Message, vote: Vote | null) {
+  if (current === undefined) return;
+  try {
+    await request(`/api/conversations/${current}/messages/${message.id}/vote`, { method: "PUT", body: JSON.stringify({ vote }) });
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+    renderMessages();
+  }
+}
+
 function status(text: string, className = "status") {
   const el = document.createElement("p");
   el.className = className;
@@ -79,7 +110,11 @@ function status(text: string, className = "status") {
 
 function renderMessages() {
   const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
-  const children: HTMLElement[] = messages.map((m) => bubble(m.role, m.text, m.error));
+  const children: HTMLElement[] = messages.map((m) => {
+    const el = bubble(m.role, m.text, m.error);
+    if (m.role === "assistant" && m.text) el.append(feedback(m));
+    return el;
+  });
   if (pending !== undefined) children.push(bubble("user", pending));
   if (live.partial) children.push(bubble("assistant", live.partial));
   else if (live.busy || pending !== undefined) {
