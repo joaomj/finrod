@@ -2,7 +2,9 @@ import MarkdownIt from "markdown-it";
 
 type Summary = { id: number; title: string; updatedAt: number };
 type Message = { id: number; role: "user" | "assistant"; text: string; error?: string };
-type Live = { busy: boolean; partial?: string; retry?: string };
+type Live = { busy: boolean; partial?: string; retry?: string; tool?: string };
+
+const toolLabels: Record<string, string> = { web_search: "Pesquisando na web…", web_fetch: "Lendo páginas…" };
 
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true });
 const defaultLink = markdown.renderer.rules.link_open ?? ((tokens, i, options, _env, self) => self.renderToken(tokens, i, options));
@@ -80,7 +82,10 @@ function renderMessages() {
   const children: HTMLElement[] = messages.map((m) => bubble(m.role, m.text, m.error));
   if (pending !== undefined) children.push(bubble("user", pending));
   if (live.partial) children.push(bubble("assistant", live.partial));
-  else if (live.busy || pending !== undefined) children.push(status(live.retry ? `Tentando de novo: ${live.retry}` : "…"));
+  else if (live.busy || pending !== undefined) {
+    const label = live.retry ? `Tentando de novo: ${live.retry}` : live.tool ? (toolLabels[live.tool] ?? "Trabalhando…") : "…";
+    children.push(status(label));
+  }
   if (failure) children.push(status(failure, "error"));
   if (!children.length) children.push(status("Como posso ajudar?", "empty"));
   messagesEl.replaceChildren(...children);

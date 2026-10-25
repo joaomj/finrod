@@ -14,9 +14,14 @@ import {
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import type { Config } from "./config.js";
+import { Research } from "./research.js";
 
-const INSTRUCTIONS =
-  "You are Finrod, a personal assistant. Answer in the language the user writes in. Be direct and concise.";
+const INSTRUCTIONS = [
+  "You are Finrod, a personal assistant. Answer in the language the user writes in. Be direct and concise.",
+  "Use web_search whenever the answer depends on current or external facts you cannot know for certain.",
+  "Do not answer such questions from memory and do not send the user to look it up.",
+  "Cite the sources you used as Markdown links next to the facts they support.",
+].join(" ");
 const TITLE_LENGTH = 60;
 
 export type ConversationSummary = { id: number; title: string; updatedAt: number };
@@ -31,7 +36,7 @@ const ConversationIndex = defineDoc<{ items: ConversationSummary[] }>({
 });
 
 export type ChatMessage = { id: number; role: "user" | "assistant"; text: string; error?: string };
-export type LiveStatus = { busy: boolean; partial?: string; retry?: string };
+export type LiveStatus = { busy: boolean; partial?: string; retry?: string; tool?: string };
 
 export class Chat {
   private constructor(
@@ -52,7 +57,9 @@ export class Chat {
     const dir = join(config.dataDir, "profiles", config.profile);
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const storage = await openNodeSqliteStorage(join(dir, "finrod.sqlite"));
-    const harness = await Harness.open(storage, { models, registry: createRegistry() }, context);
+    const registry = createRegistry();
+    registry.install(Research);
+    const harness = await Harness.open(storage, { models, registry }, context);
     harness.resume();
     return new Chat(harness, { provider: "openrouter", modelId: config.model });
   }
@@ -140,7 +147,13 @@ export function liveOf(view: ConversationView): LiveStatus {
   const live = view.docs["pi.live"] as LiveState | undefined;
   const partial = live?.generation?.message ? assistantText(live.generation.message as AssistantMessage) : undefined;
   const retry = live?.generation?.retry?.error;
-  return { busy: live?.run !== undefined, ...(partial ? { partial } : {}), ...(retry ? { retry } : {}) };
+  const tool = live?.tools?.find((slot) => slot.status !== "done")?.name;
+  return {
+    busy: live?.run !== undefined,
+    ...(partial ? { partial } : {}),
+    ...(retry ? { retry } : {}),
+    ...(tool ? { tool } : {}),
+  };
 }
 
 function userText(message: UserMessage): string {
