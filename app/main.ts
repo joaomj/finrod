@@ -2,7 +2,8 @@ import MarkdownIt from "markdown-it";
 
 type Summary = { id: number; title: string; updatedAt: number };
 type Vote = "up" | "down";
-type Message = { id: number; role: "user" | "assistant"; text: string; error?: string; vote?: Vote };
+type Source = { title: string; url: string };
+type Message = { id: number; role: "user" | "assistant"; text: string; error?: string; vote?: Vote; sources?: Source[] };
 type Live = { busy: boolean; partial?: string; retry?: string; tool?: string };
 
 const toolLabels: Record<string, string> = { web_search: "Pesquisando na web…", web_fetch: "Lendo páginas…" };
@@ -23,6 +24,7 @@ const form = $<HTMLFormElement>("composer");
 const input = $<HTMLTextAreaElement>("input");
 const send = $<HTMLButtonElement>("send");
 const scrim = $("scrim");
+const exa = $<HTMLButtonElement>("exa");
 
 let conversations: Summary[] = [];
 let current: number | undefined;
@@ -31,6 +33,32 @@ let live: Live = { busy: false };
 let pending: string | undefined;
 let failure: string | undefined;
 let events: EventSource | undefined;
+let exaConnected = false;
+
+async function refreshExa() {
+  exaConnected = (await request<{ connected: boolean }>("/api/exa")).connected;
+  exa.textContent = exaConnected ? "Exa conectado · Desconectar" : "Conectar Exa (mais pesquisas)";
+  exa.hidden = false;
+}
+
+async function toggleExa() {
+  exa.disabled = true;
+  try {
+    if (exaConnected) {
+      if (!confirm("Desconectar sua conta Exa? As pesquisas voltam ao plano gratuito, com limite menor.")) return;
+      await request("/api/exa", { method: "DELETE" });
+      await refreshExa();
+    } else {
+      location.href = (await request<{ url: string }>("/api/exa/connect", { method: "POST", body: "{}" })).url;
+    }
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+    setMenu(false);
+    renderMessages();
+  } finally {
+    exa.disabled = false;
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, headers: { "content-type": "application/json" } });
@@ -76,6 +104,26 @@ const thumbs: Record<Vote, { label: string; path: string }> = {
   down: { label: "Resposta ruim", path: "M17 14V3M17 14l-4 8a3 3 0 0 1-3-3v-4H5a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 6.4 3H17M17 14h3V3h-3" },
 };
 
+function sources(list: Source[]) {
+  const el = document.createElement("div");
+  el.className = "sources";
+  const heading = document.createElement("p");
+  heading.textContent = list.length > 1 ? "Fontes" : "Fonte";
+  const items = document.createElement("ul");
+  for (const source of list) {
+    const item = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = source.url;
+    link.textContent = source.title;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    item.append(link);
+    items.append(item);
+  }
+  el.append(heading, items);
+  return el;
+}
+
 function feedback(message: Message) {
   const row = document.createElement("div");
   row.className = "feedback";
@@ -112,7 +160,10 @@ function renderMessages() {
   const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
   const children: HTMLElement[] = messages.map((m) => {
     const el = bubble(m.role, m.text, m.error);
-    if (m.role === "assistant" && m.text) el.append(feedback(m));
+    if (m.role === "assistant" && m.text) {
+      if (m.sources?.length) el.append(sources(m.sources));
+      el.append(feedback(m));
+    }
     return el;
   });
   if (pending !== undefined) children.push(bubble("user", pending));
@@ -231,10 +282,11 @@ $("new").addEventListener("click", () => {
   else open(undefined);
   input.focus();
 });
+exa.addEventListener("click", () => void toggleExa());
 window.addEventListener("hashchange", route);
 
 route();
-refreshList().catch((error: unknown) => {
+Promise.all([refreshList(), refreshExa()]).catch((error: unknown) => {
   failure = error instanceof Error ? error.message : String(error);
   renderMessages();
 });

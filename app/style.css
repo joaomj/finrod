@@ -33,6 +33,10 @@ body.open #sidebar { transform: none; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 #list a[aria-current] { background: var(--user); color: var(--text); }
+#exa { padding: .6rem .9rem; border-radius: .6rem; color: var(--muted); text-align: left; font-size: .9rem; }
+#exa:disabled { opacity: .5; cursor: default; }
+.notice { max-width: 32rem; margin: auto; padding: 2rem 1.25rem; height: auto; display: block; }
+.notice a { color: inherit; }
 
 main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100dvh; }
 header {
@@ -54,6 +58,10 @@ h1 { margin: 0; font-size: 1rem; font-weight: 600; white-space: nowrap; overflow
 .assistant code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .9em; }
 .assistant table { border-collapse: collapse; display: block; overflow-x: auto; }
 .assistant th, .assistant td { border: 1px solid var(--line); padding: .3rem .6rem; }
+.sources { margin-top: .75rem; padding-top: .6rem; border-top: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
+.sources p { margin: 0 0 .3rem; font-weight: 600; }
+.sources ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: .2rem; }
+.sources a { color: inherit; }
 .feedback { display: flex; gap: .25rem; margin-top: .4rem; }
 .feedback button { padding: .3rem; border-radius: .4rem; color: var(--muted); display: flex; }
 .feedback svg { width: 1.05rem; height: 1.05rem; }
