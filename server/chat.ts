@@ -14,7 +14,8 @@ import {
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import type { Config } from "./config.js";
-import { Research } from "./research.js";
+import { ExaAuth } from "./exa-auth.js";
+import { research } from "./research.js";
 
 const INSTRUCTIONS = [
   "You are Finrod, a personal assistant. Answer in the language the user writes in. Be direct and concise.",
@@ -36,7 +37,15 @@ const ConversationIndex = defineDoc<{ items: ConversationSummary[] }>({
 });
 
 export type Vote = "up" | "down";
-export type ChatMessage = { id: number; role: "user" | "assistant"; text: string; error?: string; vote?: Vote };
+export type Source = { title: string; url: string };
+export type ChatMessage = {
+  id: number;
+  role: "user" | "assistant";
+  text: string;
+  error?: string;
+  vote?: Vote;
+  sources?: Source[];
+};
 /** A thumbs vote on one answer; the newest entry for a target wins, and `vote: null` clears it. */
 const FEEDBACK = "finrod.feedback";
 type FeedbackData = { target: number; vote: Vote | null };
@@ -46,6 +55,7 @@ export class Chat {
   private constructor(
     private readonly harness: Harness,
     private readonly model: { provider: string; modelId: string },
+    readonly exa: ExaAuth,
   ) {}
 
   static async open(config: Config): Promise<Chat> {
@@ -61,11 +71,12 @@ export class Chat {
     const dir = join(config.dataDir, "profiles", config.profile);
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const storage = await openNodeSqliteStorage(join(dir, "finrod.sqlite"));
+    const exa = new ExaAuth(join(dir, "exa-oauth.json"), config.publicUrl);
     const registry = createRegistry();
-    registry.install(Research);
+    registry.install(research(exa));
     const harness = await Harness.open(storage, { models, registry }, context);
     harness.resume();
-    return new Chat(harness, { provider: "openrouter", modelId: config.model });
+    return new Chat(harness, { provider: "openrouter", modelId: config.model }, exa);
   }
 
   /** Settles when the store closes; `failed` means the process must restart. */
@@ -140,8 +151,32 @@ function titleOf(text: string): string {
   return line.length > TITLE_LENGTH ? `${line.slice(0, TITLE_LENGTH - 1)}…` : line;
 }
 
+/** Search and read tools whose results carry the pages an answer rests on. */
+const RESEARCH_TOOLS = new Set(["web_search", "web_fetch"]);
+const MAX_SOURCES = 6;
+
+/** Page titles and URLs from one tool result, in the order Exa listed them. */
+function sourcesFrom(text: string): Source[] {
+  const sources: Source[] = [];
+  let title: string | undefined;
+  for (const line of text.split("\n")) {
+    const named = /^Title:\s*(\S.*)$/.exec(line);
+    if (named) title = named[1]!.trim();
+    const addressed = /^URL:\s*(\S+)\s*$/.exec(line);
+    if (addressed) {
+      const url = addressed[1]!;
+      // Exa prints "N/A" for a page it has no title for; the address is then the best label.
+      sources.push({ title: !title || title === "N/A" ? url : title, url });
+      title = undefined;
+    }
+  }
+  return sources;
+}
+
 export function messagesOf(view: ConversationView): ChatMessage[] {
   const votes = new Map<number, Vote | null>();
+  // Sources are attached by Finrod from the tool results, not asked of the model.
+  let found: Source[] = [];
   for (const entry of view.entries) {
     if (entry.kind === FEEDBACK) {
       const data = entry.data as FeedbackData;
@@ -151,7 +186,11 @@ export function messagesOf(view: ConversationView): ChatMessage[] {
   const messages: ChatMessage[] = [];
   for (const entry of view.entries) {
     const message = entry.model?.[0];
-    if (entry.kind === "pi.user" && message?.role === "user") {
+    if (entry.kind === "pi.tool-result" && message?.role === "toolResult" && RESEARCH_TOOLS.has(message.toolName) && !message.isError) {
+      const text = message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
+      found.push(...sourcesFrom(text));
+    } else if (entry.kind === "pi.user" && message?.role === "user") {
+      found = [];
       messages.push({ id: entry.id, role: "user", text: userText(message) });
     } else if (entry.kind === "pi.assistant" && message?.role === "assistant") {
       const text = assistantText(message);
@@ -163,7 +202,9 @@ export function messagesOf(view: ConversationView): ChatMessage[] {
             : undefined;
       if (!text && !error) continue;
       const vote = votes.get(entry.id);
-      messages.push({ id: entry.id, role: "assistant", text, ...(error ? { error } : {}), ...(vote ? { vote } : {}) });
+      const sources = answerSources(found);
+      found = [];
+      messages.push({ id: entry.id, role: "assistant", text, ...(error ? { error } : {}), ...(vote ? { vote } : {}), ...(sources.length ? { sources } : {}) });
     }
   }
   return messages;
@@ -180,6 +221,19 @@ export function liveOf(view: ConversationView): LiveStatus {
     ...(retry ? { retry } : {}),
     ...(tool ? { tool } : {}),
   };
+}
+
+/** The pages used for one answer, one entry per URL, in the order the tools returned them. */
+function answerSources(found: Source[]): Source[] {
+  const seen = new Set<string>();
+  const sources: Source[] = [];
+  for (const source of found) {
+    if (seen.has(source.url)) continue;
+    seen.add(source.url);
+    sources.push(source);
+    if (sources.length === MAX_SOURCES) break;
+  }
+  return sources;
 }
 
 function userText(message: UserMessage): string {

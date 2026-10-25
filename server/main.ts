@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { Chat, liveOf, messagesOf } from "./chat.js";
 import { loadConfig } from "./config.js";
+import { EXA_CALLBACK_PATH } from "./exa-auth.js";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGE_CHARS = 32_000;
@@ -78,7 +79,34 @@ async function events(request: IncomingMessage, response: ServerResponse, id: nu
   });
 }
 
+function page(response: ServerResponse, status: number, title: string, text: string) {
+  const escape = (value: string) => value.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  response
+    .writeHead(status, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" })
+    .end(
+      `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
+        `<title>${escape(title)}</title><link rel="stylesheet" href="/style.css">` +
+        `<main class="notice"><h1>${escape(title)}</h1><p>${escape(text)}</p><p><a href="/">Voltar ao Finrod</a></p></main>`,
+    );
+}
+
+async function exaCallback(response: ServerResponse, params: URLSearchParams) {
+  try {
+    await chat.exa.finish(params);
+  } catch (error) {
+    console.error("Exa sign-in failed:", error);
+    return page(response, 400, "Exa não conectado", error instanceof Error ? error.message : String(error));
+  }
+  response.writeHead(303, { location: "/", "cache-control": "no-store" }).end();
+}
+
 async function api(request: IncomingMessage, response: ServerResponse, path: string) {
+  if (path === "/api/exa" && request.method === "GET") return json(response, 200, { connected: await chat.exa.connected() });
+  if (path === "/api/exa/connect" && request.method === "POST") return json(response, 200, { url: await chat.exa.start() });
+  if (path === "/api/exa" && request.method === "DELETE") {
+    await chat.exa.disconnect();
+    return json(response, 200, {});
+  }
   if (path === "/api/conversations" && request.method === "GET") return json(response, 200, await chat.list());
   if (path === "/api/conversations" && request.method === "POST") return json(response, 201, { id: await chat.create() });
   const vote = /^\/api\/conversations\/(\d+)\/messages\/(\d+)\/vote$/.exec(path);
@@ -118,9 +146,11 @@ async function file(response: ServerResponse, path: string) {
 }
 
 const server = createServer(async (request, response) => {
-  const path = new URL(request.url ?? "/", "http://localhost").pathname;
+  const url = new URL(request.url ?? "/", "http://localhost");
+  const path = url.pathname;
   try {
-    if (path.startsWith("/api/")) await api(request, response, path);
+    if (path === EXA_CALLBACK_PATH && request.method === "GET") await exaCallback(response, url.searchParams);
+    else if (path.startsWith("/api/")) await api(request, response, path);
     else await file(response, path);
   } catch (error) {
     if (error instanceof HttpError) return json(response, error.status, { error: error.message });
@@ -131,7 +161,7 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(config.port, "127.0.0.1", () => {
-  console.log(`Finrod listening on http://127.0.0.1:${config.port} (profile ${config.profile}, model ${config.model})`);
+  console.log(`Finrod listening on http://127.0.0.1:${config.port} (profile ${config.profile}, model ${config.model}, public URL ${config.publicUrl})`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

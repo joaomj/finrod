@@ -5,6 +5,8 @@ export type Config = {
   readonly dataDir: string;
   readonly profile: string;
   readonly model: string;
+  /** Address the browser opens Finrod at; Exa's sign-in returns there. */
+  readonly publicUrl: string;
 };
 
 /** Read and validate settings from the environment; throw with the setting name and the fix. */
@@ -20,8 +22,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (!/^[a-z0-9-]+$/.test(profile)) {
     throw new Error(`FINROD_PROFILE must use lowercase letters, digits, and hyphens; got "${profile}".`);
   }
+  const publicUrl = (env.FINROD_PUBLIC_URL ?? `http://127.0.0.1:${port}`).replace(/\/+$/, "");
+  let parsed: URL | undefined;
+  try {
+    parsed = new URL(publicUrl);
+  } catch {}
+  if (!parsed || !/^https?:$/.test(parsed.protocol) || parsed.pathname !== "/" || parsed.search) {
+    throw new Error(
+      `FINROD_PUBLIC_URL must be the http(s) origin the browser opens Finrod at, such as https://finrod.example.ts.net; got "${publicUrl}".`,
+    );
+  }
   return {
     port,
+    publicUrl,
     dataDir: resolve(env.FINROD_DATA_DIR ?? ".finrod"),
     profile,
     model: env.FINROD_MODEL ?? "deepseek/deepseek-v4.1-flash-1017",
