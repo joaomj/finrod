@@ -229,8 +229,8 @@ node_modules/
 # Private source archives and local import outputs
 /data/
 
-# Generated phone-local browser bundle
-/web-dist/
+# Background job logs
+.pi-bgrun/
 
 # Reference clones (ideas only, never built or committed)
 inspiration/*

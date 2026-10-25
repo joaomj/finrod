@@ -43,12 +43,6 @@ but does not keep them. Profiles never share logs, keys, memory, or
 connectors. Details are
 in [v0.3.0 requirements](docs/PRD-v030.md).
 
-## Retired browser source
-
-The `web/` source and its build (`npm run build`, `npm run web:serve`,
-`npm test`) belong to the retired v0.2.0 product. They remain in the checkout
-as a reference until a separate cleanup decision removes them.
-
 ## Why Finrod?
 
 [Finrod Felagund](https://tolkiengateway.net/wiki/Finrod) was a king of the Noldor,

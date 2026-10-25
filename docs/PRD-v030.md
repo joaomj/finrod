@@ -39,6 +39,16 @@ Chats, files, and memory stay on the server as files the user owns.
 - The phone must have Tailscale connected to use Finrod.
 - The v0.2.0 browser history was test data. There is no migration.
 
+## Interface
+
+- Mobile first: designed for the phone, and fully usable on a desktop
+  browser.
+- Minimal and clean: the conversation fills the screen; other controls
+  stay out of the way until needed.
+- Very fast: the app opens and becomes usable almost at once, and typing
+  and scrolling never lag. Keep the app small, with no heavy UI
+  framework.
+
 ## V1 scope
 
 | User outcome | Acceptance criterion |
@@ -79,20 +89,22 @@ Chats, files, and memory stay on the server as files the user owns.
 - Inference and transcription go through OpenRouter so the model can
   change without porting anything.
 - Finrod uses only OpenRouter providers with zero data retention (ZDR).
-  The provider still receives the context and audio of each request.
+  The ZDR restriction is set in the OpenRouter account settings, so
+  OpenRouter enforces it for every request made with the account's key.
+  Finrod only needs the API key.
+- The provider still receives the context and audio of each request.
 - Finrod sends a request only the context that request needs.
 
 ## Transcription decision
 
-- V1 transcribes voice through OpenRouter `/audio/transcriptions` with the
-  ZDR filter (`provider.data_collection: deny`). Audio leaves home for
-  each voice message; the provider does not retain it.
+- V1 transcribes voice through OpenRouter `/audio/transcriptions`. Audio
+  leaves home for each voice message; the provider does not retain it.
 - In the [STT eval](STT-EVAL.md) (2026-10-19), only `qwen/qwen3-asr-0.6b`
   routed under the ZDR filter. Its first call took 86s cold, then 1-3s.
   Accuracy was on par with local faster-whisper `small`.
-- Finrod does not transcribe through a provider without ZDR. If no ZDR
-  model is available, the voice message fails with a visible error and
-  the audio stays in the raw log.
+- If OpenRouter rejects a transcription request, for example because no
+  ZDR provider serves the model, the voice message fails with a visible
+  error and the audio stays in the raw log.
 - Local transcription on the mini PC (faster-whisper `small`, int8, CPU,
   about 2s per clip) is the tested alternative if provider transcription
   proves insufficient.

@@ -3,19 +3,13 @@
     "target": "ES2023",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": [
-      "ES2023",
-      "DOM",
-      "DOM.AsyncIterable"
-    ],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
-    "rootDir": "web",
     "noEmit": true
   },
-  "include": [
-    "web/**/*.ts"
-  ]
+  "include": ["**/*.ts"]
 }
