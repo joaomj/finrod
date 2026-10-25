@@ -1,0 +1,14 @@
+[Unit]
+Description=Finrod chat server
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/.local/share/finrod/current
+EnvironmentFile=%h/.local/share/finrod/finrod.env
+Environment=FINROD_DATA_DIR=%h/.local/share/finrod/data
+ExecStart=%h/.local/opt/node/bin/node dist/server/main.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
