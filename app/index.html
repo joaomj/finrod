@@ -30,10 +30,18 @@
     </header>
     <section id="messages" aria-live="polite"></section>
     <form id="composer">
-      <textarea id="input" rows="1" placeholder="Mensagem" autocomplete="off" enterkeyhint="send" aria-label="Mensagem"></textarea>
-      <button id="send" type="submit" aria-label="Enviar" disabled>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-      </button>
+      <div id="tray" hidden></div>
+      <div class="line">
+        <button id="attach" type="button" aria-label="Anexar arquivo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.5 12 21a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10 19a2 2 0 0 1-3-3l8-8"/></svg>
+        </button>
+        <input id="picker" type="file" multiple hidden
+          accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,text/markdown,text/csv,.pdf,.txt,.md,.csv">
+        <textarea id="input" rows="1" placeholder="Mensagem" autocomplete="off" enterkeyhint="send" aria-label="Mensagem"></textarea>
+        <button id="send" type="submit" aria-label="Enviar" disabled>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
     </form>
   </main>
 </body>

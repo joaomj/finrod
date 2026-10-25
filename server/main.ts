@@ -4,6 +4,7 @@ import { extname, join, normalize } from "node:path";
 import { Chat, liveOf, messagesOf } from "./chat.js";
 import { loadConfig } from "./config.js";
 import { EXA_CALLBACK_PATH } from "./exa-auth.js";
+import { isStoredName, MAX_FILE_BYTES, mimeOfStoredName, type Attachment } from "./files.js";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGE_CHARS = 32_000;
@@ -33,19 +34,43 @@ class HttpError extends Error {
   }
 }
 
-async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
+async function readBody(request: IncomingMessage, limit: number, tooLarge: string): Promise<Buffer> {
   let size = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of request as AsyncIterable<Buffer>) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) throw new HttpError(413, "Request body is too large.");
+    if (size > limit) throw new HttpError(413, tooLarge);
     chunks.push(chunk);
   }
+  return Buffer.concat(chunks);
+}
+
+async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
   try {
-    const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const value: unknown = JSON.parse((await readBody(request, MAX_BODY_BYTES, "Request body is too large.")).toString("utf8"));
     if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
   } catch {}
   throw new HttpError(400, "Request body must be a JSON object.");
+}
+
+async function upload(request: IncomingMessage, response: ServerResponse) {
+  const name = decodeURIComponent(String(request.headers["x-file-name"] ?? "file"));
+  const bytes = await readBody(request, MAX_FILE_BYTES, `"${name}" is larger than the ${MAX_FILE_BYTES / (1024 * 1024)} MB limit.`);
+  if (bytes.length === 0) throw new HttpError(400, `"${name}" is empty.`);
+  let attachment: Attachment;
+  try {
+    attachment = await chat.storeFile(bytes, name);
+  } catch (error) {
+    if (error instanceof Error && /is not an image/.test(error.message)) throw new HttpError(415, error.message);
+    throw error;
+  }
+  return json(response, 201, attachment);
+}
+
+async function storedFile(response: ServerResponse, name: string) {
+  if (!isStoredName(name)) throw new HttpError(404, "Not found.");
+  const body = await chat.readFile(name);
+  response.writeHead(200, { "content-type": mimeOfStoredName(name), "cache-control": "private, max-age=31536000, immutable" }).end(body);
 }
 
 function json(response: ServerResponse, status: number, body: unknown) {
@@ -100,7 +125,26 @@ async function exaCallback(response: ServerResponse, params: URLSearchParams) {
   response.writeHead(303, { location: "/", "cache-control": "no-store" }).end();
 }
 
+/** The uploads a message refers to, read again from their originals so a stale upload is noticed. */
+async function filesOf(wanted: readonly unknown[]): Promise<Attachment[]> {
+  const files: Attachment[] = [];
+  for (const item of wanted) {
+    const { id, name } = item as { id?: unknown; name?: unknown };
+    if (typeof id !== "string" || !isStoredName(id)) throw new HttpError(400, "A file reference in this message is not an upload.");
+    const shown = typeof name === "string" && name ? name.slice(0, 200) : "file";
+    try {
+      files.push(await chat.describeFile(id, shown));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new HttpError(400, "That upload no longer exists. Send the file again.");
+      throw error;
+    }
+  }
+  return files;
+}
+
 async function api(request: IncomingMessage, response: ServerResponse, path: string) {
+  if (path === "/api/files" && request.method === "POST") return upload(request, response);
+  if (path.startsWith("/api/files/") && request.method === "GET") return storedFile(response, path.slice("/api/files/".length));
   if (path === "/api/exa" && request.method === "GET") return json(response, 200, { connected: await chat.exa.connected() });
   if (path === "/api/exa/connect" && request.method === "POST") return json(response, 200, { url: await chat.exa.start() });
   if (path === "/api/exa" && request.method === "DELETE") {
@@ -124,9 +168,11 @@ async function api(request: IncomingMessage, response: ServerResponse, path: str
     const body = await readJson(request);
     const text = typeof body.text === "string" ? body.text.trim() : "";
     const requestId = typeof body.requestId === "string" ? body.requestId : "";
-    if (!text || text.length > MAX_MESSAGE_CHARS) throw new HttpError(400, `Message must be 1-${MAX_MESSAGE_CHARS} characters.`);
+    const wanted = Array.isArray(body.files) ? body.files : [];
+    if (text.length > MAX_MESSAGE_CHARS) throw new HttpError(400, `Message must be at most ${MAX_MESSAGE_CHARS} characters.`);
+    if (!text && wanted.length === 0) throw new HttpError(400, "Message must have text or a file.");
     if (!/^[A-Za-z0-9-]{8,64}$/.test(requestId)) throw new HttpError(400, "requestId must be 8-64 letters, digits, or hyphens.");
-    if (!(await chat.send(id, text, requestId))) throw new HttpError(404, "Conversation not found.");
+    if (!(await chat.send(id, text, await filesOf(wanted), requestId))) throw new HttpError(404, "Conversation not found.");
     return json(response, 202, {});
   }
   throw new HttpError(405, "Method not allowed.");

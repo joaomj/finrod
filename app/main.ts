@@ -3,7 +3,9 @@ import MarkdownIt from "markdown-it";
 type Summary = { id: number; title: string; updatedAt: number };
 type Vote = "up" | "down";
 type Source = { title: string; url: string };
-type Message = { id: number; role: "user" | "assistant"; text: string; error?: string; vote?: Vote; sources?: Source[] };
+type SentFile = { id: string; kind: "image" | "document"; name: string; mime: string; size: number; unreadable?: string };
+type Message = { id: number; role: "user" | "assistant"; text: string; error?: string; vote?: Vote; sources?: Source[]; files?: SentFile[] };
+type Pending = { file: SentFile; sending: boolean };
 type Live = { busy: boolean; partial?: string; retry?: string; tool?: string };
 
 const toolLabels: Record<string, string> = { web_search: "Pesquisando na web…", web_fetch: "Lendo páginas…" };
@@ -25,15 +27,20 @@ const input = $<HTMLTextAreaElement>("input");
 const send = $<HTMLButtonElement>("send");
 const scrim = $("scrim");
 const exa = $<HTMLButtonElement>("exa");
+const attach = $<HTMLButtonElement>("attach");
+const picker = $<HTMLInputElement>("picker");
+const tray = $("tray");
+const MAX_UPLOAD = 20 * 1024 * 1024;
 
 let conversations: Summary[] = [];
 let current: number | undefined;
 let messages: Message[] = [];
 let live: Live = { busy: false };
-let pending: string | undefined;
+let pending: { text: string; files: SentFile[] } | undefined;
 let failure: string | undefined;
 let events: EventSource | undefined;
 let exaConnected = false;
+let attachments: Pending[] = [];
 
 async function refreshExa() {
   exaConnected = (await request<{ connected: boolean }>("/api/exa")).connected;
@@ -61,7 +68,9 @@ async function toggleExa() {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { ...init, headers: { "content-type": "application/json" } });
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) };
+  if (typeof init?.body === "string" || init?.body === undefined) headers["content-type"] = "application/json";
+  const response = await fetch(path, { ...init, headers });
   const body = (await response.json().catch(() => ({}))) as T & { error?: string };
   if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status}).`);
   return body;
@@ -85,10 +94,44 @@ function renderList() {
   title.textContent = conversations.find((item) => item.id === current)?.title || "Finrod";
 }
 
-function bubble(role: "user" | "assistant", text: string, error?: string) {
+function size(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} kB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileChip(file: SentFile) {
+  const el = document.createElement("div");
+  el.className = "file";
+  const name = document.createElement("span");
+  name.textContent = `${file.name} · ${size(file.size)}`;
+  el.append(name);
+  if (file.unreadable) {
+    const note = document.createElement("p");
+    note.className = "error";
+    note.textContent = `Páginas sem texto legível: ${file.unreadable}.`;
+    el.append(note);
+  }
+  return el;
+}
+
+function bubble(role: "user" | "assistant", text: string, error?: string, files?: SentFile[]) {
   const el = document.createElement("div");
   el.className = role;
-  if (role === "user") el.textContent = text;
+  for (const file of files ?? []) {
+    if (file.kind !== "image") continue;
+    const image = document.createElement("img");
+    image.src = `/api/files/${file.id}`;
+    image.alt = file.name;
+    image.loading = "lazy";
+    el.append(image);
+  }
+  if (role === "user" && text) {
+    const body = document.createElement("p");
+    body.textContent = text;
+    el.append(body);
+  }
+  for (const file of files ?? []) if (file.kind === "document") el.append(fileChip(file));
   else if (text) el.innerHTML = markdown.render(text);
   if (error) {
     const note = document.createElement("p");
@@ -159,14 +202,14 @@ function status(text: string, className = "status") {
 function renderMessages() {
   const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
   const children: HTMLElement[] = messages.map((m) => {
-    const el = bubble(m.role, m.text, m.error);
+    const el = bubble(m.role, m.text, m.error, m.files);
     if (m.role === "assistant" && m.text) {
       if (m.sources?.length) el.append(sources(m.sources));
       el.append(feedback(m));
     }
     return el;
   });
-  if (pending !== undefined) children.push(bubble("user", pending));
+  if (pending !== undefined) children.push(bubble("user", pending.text, undefined, pending.files));
   if (live.partial) children.push(bubble("assistant", live.partial));
   else if (live.busy || pending !== undefined) {
     const label = live.retry ? `Tentando de novo: ${live.retry}` : live.tool ? (toolLabels[live.tool] ?? "Trabalhando…") : "…";
@@ -179,7 +222,8 @@ function renderMessages() {
 }
 
 function updateSend() {
-  send.disabled = !input.value.trim() || pending !== undefined;
+  const busy = attachments.some((item) => item.sending);
+  send.disabled = (!input.value.trim() && attachments.length === 0) || pending !== undefined || busy;
 }
 
 async function refreshList() {
@@ -202,7 +246,8 @@ function open(id: number | undefined) {
   events = new EventSource(`/api/conversations/${id}/events`);
   events.addEventListener("messages", (event) => {
     messages = JSON.parse((event as MessageEvent<string>).data) as Message[];
-    if (pending !== undefined && messages.some((m) => m.role === "user" && m.text === pending)) pending = undefined;
+    const sent = pending;
+    if (sent && messages.some((m) => m.role === "user" && m.text === sent.text)) pending = undefined;
     renderMessages();
     updateSend();
   });
@@ -223,10 +268,13 @@ function route() {
 
 async function submit() {
   const text = input.value.trim();
-  if (!text || pending !== undefined) return;
+  const files = attachments.map((item) => item.file);
+  if ((!text && files.length === 0) || pending !== undefined) return;
   failure = undefined;
-  pending = text;
+  pending = { text, files };
   input.value = "";
+  attachments = [];
+  renderTray();
   resize();
   updateSend();
   renderMessages();
@@ -242,17 +290,77 @@ async function submit() {
     }
     await request(`/api/conversations/${id}/messages`, {
       method: "POST",
-      body: JSON.stringify({ text, requestId: crypto.randomUUID() }),
+      body: JSON.stringify({
+        text,
+        requestId: crypto.randomUUID(),
+        files: files.map((file) => ({ id: file.id, name: file.name })),
+      }),
     });
     await refreshList();
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
-    input.value = pending ?? text;
+    input.value = pending.text || text;
+    attachments = files.map((file) => ({ file, sending: false }));
     pending = undefined;
+    renderTray();
     resize();
     updateSend();
     renderMessages();
   }
+}
+
+/** Upload one file now, so a slow upload never holds up the message itself. */
+async function upload(file: File) {
+  if (file.size > MAX_UPLOAD) {
+    failure = `"${file.name}" passa do limite de ${MAX_UPLOAD / (1024 * 1024)} MB.`;
+    renderMessages();
+    return;
+  }
+  const entry: Pending = {
+    file: { id: "", kind: file.type.startsWith("image/") ? "image" : "document", name: file.name, mime: file.type, size: file.size },
+    sending: true,
+  };
+  attachments.push(entry);
+  renderTray();
+  try {
+    const stored = await request<SentFile>("/api/files", {
+      method: "POST",
+      body: file,
+      headers: { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(file.name) },
+    });
+    entry.file = stored;
+  } catch (error) {
+    attachments = attachments.filter((item) => item !== entry);
+    failure = error instanceof Error ? error.message : String(error);
+    renderMessages();
+  } finally {
+    entry.sending = false;
+    renderTray();
+    updateSend();
+  }
+}
+
+function renderTray() {
+  tray.hidden = attachments.length === 0;
+  tray.replaceChildren(
+    ...attachments.map((item) => {
+      const chip = document.createElement("div");
+      chip.className = "pending";
+      const label = document.createElement("span");
+      label.textContent = item.sending ? `${item.file.name} · enviando…` : item.file.name;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remover ${item.file.name}`);
+      remove.textContent = "×";
+      remove.addEventListener("click", () => {
+        attachments = attachments.filter((other) => other !== item);
+        renderTray();
+        updateSend();
+      });
+      chip.append(label, remove);
+      return chip;
+    }),
+  );
 }
 
 function resize() {
@@ -283,6 +391,11 @@ $("new").addEventListener("click", () => {
   input.focus();
 });
 exa.addEventListener("click", () => void toggleExa());
+attach.addEventListener("click", () => picker.click());
+picker.addEventListener("change", () => {
+  for (const file of picker.files ?? []) void upload(file);
+  picker.value = "";
+});
 window.addEventListener("hashchange", route);
 
 route();

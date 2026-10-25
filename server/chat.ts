@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
-import type { AssistantMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, ImageContent, TextContent, UserMessage } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
 import {
@@ -15,6 +15,7 @@ import {
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import type { Config } from "./config.js";
 import { ExaAuth } from "./exa-auth.js";
+import { describeStoredFile, readStoredFile, storeFile, type Attachment } from "./files.js";
 import { research } from "./research.js";
 
 const INSTRUCTIONS = [
@@ -38,6 +39,8 @@ const ConversationIndex = defineDoc<{ items: ConversationSummary[] }>({
 
 export type Vote = "up" | "down";
 export type Source = { title: string; url: string };
+/** What the app shows of a sent file; the text sent to the model stays on the server. */
+export type SentFile = Pick<Attachment, "id" | "kind" | "name" | "mime" | "size" | "unreadable">;
 export type ChatMessage = {
   id: number;
   role: "user" | "assistant";
@@ -45,7 +48,11 @@ export type ChatMessage = {
   error?: string;
   vote?: Vote;
   sources?: Source[];
+  files?: SentFile[];
 };
+/** Kind of an input placed with files, so the transcript keeps their names next to the text. */
+const MESSAGE_KIND = "finrod.message";
+type MessageData = { text: string; files: SentFile[] };
 /** A thumbs vote on one answer; the newest entry for a target wins, and `vote: null` clears it. */
 const FEEDBACK = "finrod.feedback";
 type FeedbackData = { target: number; vote: Vote | null };
@@ -55,6 +62,7 @@ export class Chat {
   private constructor(
     private readonly harness: Harness,
     private readonly model: { provider: string; modelId: string },
+    private readonly filesDir: string,
     readonly exa: ExaAuth,
   ) {}
 
@@ -69,14 +77,15 @@ export class Chat {
       );
     }
     const dir = join(config.dataDir, "profiles", config.profile);
-    await mkdir(dir, { recursive: true, mode: 0o700 });
+    const files = join(dir, "files");
+    await mkdir(files, { recursive: true, mode: 0o700 });
     const storage = await openNodeSqliteStorage(join(dir, "finrod.sqlite"));
     const exa = new ExaAuth(join(dir, "exa-oauth.json"), config.publicUrl);
     const registry = createRegistry();
     registry.install(research(exa));
     const harness = await Harness.open(storage, { models, registry }, context);
     harness.resume();
-    return new Chat(harness, { provider: "openrouter", modelId: config.model }, exa);
+    return new Chat(harness, { provider: "openrouter", modelId: config.model }, files, exa);
   }
 
   /** Settles when the store closes; `failed` means the process must restart. */
@@ -106,19 +115,65 @@ export class Chat {
     return conversation.id;
   }
 
-  /** Admit a message; a repeated `requestId` returns the original submission instead of sending twice. */
-  async send(id: number, text: string, requestId: string): Promise<boolean> {
+  /**
+   * Admit a message; a repeated `requestId` returns the original submission instead of sending twice. Files
+   * go to the model as image content, or as document text.
+   */
+  async send(id: number, text: string, files: readonly Attachment[], requestId: string): Promise<boolean> {
     const conversation = await this.harness.conversation(id as ConversationId, context);
     if (!conversation) return false;
-    await conversation.submit({ type: "input", content: text, requestId }, context);
+    const content = await this.contentOf(text, files);
+    const draft =
+      files.length === 0
+        ? { type: "input" as const, content: text, requestId }
+        : {
+            type: "input" as const,
+            content,
+            requestId,
+            entry: { kind: MESSAGE_KIND, data: { text, files: files.map(sentFile) } satisfies MessageData },
+          };
+    await conversation.submit(draft, context);
     await this.harness.commit(async (tx) => {
       const index = await tx.doc(ConversationIndex);
       const at = index.items.findIndex((item) => item.id === id);
-      const title = at >= 0 && index.items[at]!.title ? index.items[at]!.title : titleOf(text);
+      const title = at >= 0 && index.items[at]!.title ? index.items[at]!.title : titleOf(text || files.map((file) => file.name).join(", "));
       if (at >= 0) index.items.splice(at, 1);
       index.items.unshift({ id, title, updatedAt: Date.now() });
     }, context);
     return true;
+  }
+
+  /**
+   * Store an uploaded file as the profile's original and return what the model needs from it. Rejects a file
+   * that is not an image, a PDF, or plain text.
+   */
+  storeFile(bytes: Uint8Array, name: string): Promise<Attachment> {
+    return storeFile(this.filesDir, bytes, name);
+  }
+
+  /** An original uploaded earlier, read again for the message that sends it. */
+  describeFile(id: string, name: string): Promise<Attachment> {
+    return describeStoredFile(this.filesDir, id, name);
+  }
+
+  /** Image pixels and document text as the model receives them. */
+  private async contentOf(text: string, files: readonly Attachment[]): Promise<(TextContent | ImageContent)[]> {
+    const content: (TextContent | ImageContent)[] = [];
+    if (text) content.push({ type: "text", text });
+    for (const file of files) {
+      if (file.kind === "image") {
+        const bytes = await readStoredFile(this.filesDir, file.id);
+        content.push({ type: "image", data: bytes.toString("base64"), mimeType: file.mime });
+      } else if (file.text) {
+        content.push({ type: "text", text: `--- ${file.name} ---\n${file.text}` });
+      }
+    }
+    return content;
+  }
+
+  /** One stored original, for the app to show. */
+  readFile(id: string): Promise<Buffer> {
+    return readStoredFile(this.filesDir, id);
   }
 
   /**
@@ -144,6 +199,11 @@ export class Chat {
     watch.start(async (view) => onView(view));
     return () => watch.stop();
   }
+}
+
+function sentFile(file: Attachment): SentFile {
+  const { id, kind, name, mime, size, unreadable } = file;
+  return { id, kind, name, mime, size, ...(unreadable ? { unreadable } : {}) };
 }
 
 function titleOf(text: string): string {
@@ -189,6 +249,10 @@ export function messagesOf(view: ConversationView): ChatMessage[] {
     if (entry.kind === "pi.tool-result" && message?.role === "toolResult" && RESEARCH_TOOLS.has(message.toolName) && !message.isError) {
       const text = message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
       found.push(...sourcesFrom(text));
+    } else if (entry.kind === MESSAGE_KIND) {
+      const data = entry.data as MessageData;
+      found = [];
+      messages.push({ id: entry.id, role: "user", text: data.text, ...(data.files.length ? { files: data.files } : {}) });
     } else if (entry.kind === "pi.user" && message?.role === "user") {
       found = [];
       messages.push({ id: entry.id, role: "user", text: userText(message) });
