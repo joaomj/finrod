@@ -26,8 +26,7 @@ hosting credentials. GitHub Actions uses separate secrets only to upload assets.
 Published, checked stable releases automatically update the existing Pages origin.
 The deployment workflow selects the exact latest release commit and verifies all
 hosted assets after upload. It does not deploy ordinary commits or PRs.
-Other hosting changes and manual uploads require separate approval. See
-[Releasing](RELEASING.md#automatic-cloudflare-deployment) for credentials and gates.
+Other hosting changes and manual uploads require separate approval.
 
 ## Deployment credentials
 
@@ -49,8 +48,8 @@ files, and diagnostic exports. Do not save model or research credentials there.
 The secrets are configured, and the GitHub-hosted upload has succeeded.
 See [Validation](VALIDATION.md#github-hosted-deployment-2026-10-12) for evidence.
 Rotate an expired or revoked token by replacing the repository secret. After
-approval, retry the latest published release through the
-[deployment procedure](RELEASING.md#automatic-cloudflare-deployment). Secret
+approval, retry the latest published release through the deployment
+workflow. Secret
 replacement alone does not upload files.
 
 ## Updates

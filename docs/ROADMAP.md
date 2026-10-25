@@ -51,8 +51,8 @@ max tokens, or it returns silence.
 - The browser-only chat ([PRD.md](PRD.md), [ARCHITECTURE.md](ARCHITECTURE.md),
   [BROWSER.md](BROWSER.md)) is retired in favor of the server product.
 - Its browser history was test data and is disposable. There is no migration.
-- Static hosting and the release flow in [RELEASING.md](RELEASING.md) and
-  [OPERATIONS.md](OPERATIONS.md) describe the old product until replaced.
+- Static hosting in [OPERATIONS.md](OPERATIONS.md) describes the old product
+  until replaced.
 - [VALIDATION.md](VALIDATION.md) records v0.2.0 observations only.
 
 ## References

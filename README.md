@@ -83,5 +83,4 @@ sets an aspiration—not a claim that software possesses his wisdom or virtue.
 | [Architecture](docs/ARCHITECTURE.md) | Retired v0.2.0 components and persistence |
 | [Operations](docs/OPERATIONS.md) | Retired v0.2.0 hosting, updates, and recovery |
 | [Validation](docs/VALIDATION.md) | v0.2.0 evidence and phone checks |
-| [Releasing](docs/RELEASING.md) | Retired v0.2.0 CI, releases, and Cloudflare deployment |
 | [Changelog](CHANGELOG.md) | Versioned changes and release notes |
