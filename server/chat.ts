@@ -1,8 +1,9 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { AssistantMessage, ImageContent, TextContent, UserMessage } from "@earendil-works/pi-ai";
-import { createModels } from "@earendil-works/pi-ai/models";
+import { createModels, type Models } from "@earendil-works/pi-ai/models";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
 import {
   createRegistry,
@@ -11,6 +12,7 @@ import {
   type ConversationId,
   type ConversationView,
   type LiveState,
+  type Registry,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import type { Config } from "./config.js";
@@ -26,10 +28,10 @@ const INSTRUCTIONS = [
 ].join(" ");
 const TITLE_LENGTH = 60;
 
-export type ConversationSummary = { id: number; title: string; updatedAt: number };
+export type ConversationSummary = { id: number; title: string; updatedAt: number; temporary: boolean };
 
 /** Finrod's own index of conversations: titles and last activity, newest first. */
-const ConversationIndex = defineDoc<{ items: ConversationSummary[] }>({
+const ConversationIndex = defineDoc<{ items: Omit<ConversationSummary, "temporary">[] }>({
   kind: "finrod.conversations",
   version: 1,
   scope: "session",
@@ -58,34 +60,48 @@ const FEEDBACK = "finrod.feedback";
 type FeedbackData = { target: number; vote: Vote | null };
 export type LiveStatus = { busy: boolean; partial?: string; retry?: string; tool?: string };
 
-export class Chat {
+/** A message cannot be sent because the conversation went away or the request is not allowed here. */
+export class Refused extends Error {}
+
+type ThreadsOpen = {
+  readonly models: Models;
+  readonly registry: Registry;
+  readonly model: { provider: string; modelId: string };
+  readonly storage: Awaited<ReturnType<typeof openNodeSqliteStorage>>;
+  /** Absent for temporary conversations, which never write a file. */
+  readonly filesDir?: string;
+  /** Absent for temporary conversations, whose database is in memory. */
+  readonly databasePath?: string;
+};
+
+/**
+ * Conversations of one store. The permanent store is the profile's SQLite file; the temporary store
+ * lives in memory and ends with the process.
+ */
+export class Threads {
   private constructor(
     private readonly harness: Harness,
     private readonly model: { provider: string; modelId: string },
-    private readonly filesDir: string,
-    readonly exa: ExaAuth,
+    private readonly filesDir: string | undefined,
+    private readonly databasePath: string | undefined,
+    readonly temporary: boolean,
   ) {}
 
-  static async open(config: Config): Promise<Chat> {
-    const models = createModels();
-    models.setProvider(openrouterProvider());
-    const refresh = await models.refresh({ providers: ["openrouter"] });
-    if (!models.getModel("openrouter", config.model)) {
-      throw new Error(
-        `FINROD_MODEL "${config.model}" is not in the OpenRouter catalog. Set FINROD_MODEL to an OpenRouter model ID. ` +
-          `Catalog refresh result: ${JSON.stringify(refresh)}`,
-      );
-    }
-    const dir = join(config.dataDir, "profiles", config.profile);
-    const files = join(dir, "files");
-    await mkdir(files, { recursive: true, mode: 0o700 });
-    const storage = await openNodeSqliteStorage(join(dir, "finrod.sqlite"));
-    const exa = new ExaAuth(join(dir, "exa-oauth.json"), config.publicUrl);
-    const registry = createRegistry();
-    registry.install(research(exa));
-    const harness = await Harness.open(storage, { models, registry }, context);
+  /**
+   * Conversations removed in this process. The harness keeps a removed conversation in memory, so Finrod
+   * refuses it here instead of serving an answer that no longer exists on disk.
+   */
+  private readonly removed = new Set<number>();
+
+  private async handle(id: number) {
+    if (this.removed.has(id)) return undefined;
+    return this.harness.conversation(id as ConversationId, context);
+  }
+
+  static async open(open: ThreadsOpen): Promise<Threads> {
+    const harness = await Harness.open(open.storage, { models: open.models, registry: open.registry }, context);
     harness.resume();
-    return new Chat(harness, { provider: "openrouter", modelId: config.model }, files, exa);
+    return new Threads(harness, open.model, open.filesDir, open.databasePath, open.filesDir === undefined);
   }
 
   /** Settles when the store closes; `failed` means the process must restart. */
@@ -98,7 +114,8 @@ export class Chat {
   }
 
   async list(): Promise<ConversationSummary[]> {
-    return [...((await this.harness.snapshot(ConversationIndex, context))?.items ?? [])];
+    const items = (await this.harness.snapshot(ConversationIndex, context))?.items ?? [];
+    return items.map((item) => ({ ...item, temporary: this.temporary }));
   }
 
   async create(): Promise<number> {
@@ -120,7 +137,8 @@ export class Chat {
    * go to the model as image content, or as document text.
    */
   async send(id: number, text: string, files: readonly Attachment[], requestId: string): Promise<boolean> {
-    const conversation = await this.harness.conversation(id as ConversationId, context);
+    if (files.length && this.temporary) throw new Refused("Temporary conversations do not keep files.");
+    const conversation = await this.handle(id);
     if (!conversation) return false;
     const content = await this.contentOf(text, files);
     const draft =
@@ -143,6 +161,147 @@ export class Chat {
     return true;
   }
 
+  /** Image pixels and document text as the model receives them. */
+  private async contentOf(text: string, files: readonly Attachment[]): Promise<(TextContent | ImageContent)[]> {
+    const content: (TextContent | ImageContent)[] = [];
+    if (text) content.push({ type: "text", text });
+    for (const file of files) {
+      if (file.kind === "image") {
+        const bytes = await readStoredFile(this.filesDir!, file.id);
+        content.push({ type: "image", data: bytes.toString("base64"), mimeType: file.mime });
+      } else if (file.text) {
+        content.push({ type: "text", text: `--- ${file.name} ---\n${file.text}` });
+      }
+    }
+    return content;
+  }
+
+  /**
+   * Store a vote on an answer as a passive entry the model never sees. Returns false when the conversation or the
+   * answer does not exist.
+   */
+  async rate(id: number, target: number, vote: Vote | null): Promise<boolean> {
+    const conversation = await this.handle(id);
+    if (!conversation) return false;
+    const { entries } = await conversation.context(context);
+    if (!entries.some((entry) => entry.id === target && entry.kind === "pi.assistant")) return false;
+    const data: FeedbackData = { target, vote };
+    await conversation.submit({ type: "write", entry: { kind: FEEDBACK, data } }, context);
+    return true;
+  }
+
+  /** Follow one conversation; `onView` gets the current view, then every committed change. */
+  async watch(id: number, onView: (view: ConversationView) => void): Promise<(() => Promise<unknown>) | undefined> {
+    const conversation = await this.handle(id);
+    if (!conversation) return undefined;
+    const watch = await conversation.watch(context);
+    onView(watch.value);
+    watch.start(async (view) => onView(view));
+    return () => watch.stop();
+  }
+
+  /**
+   * Remove a conversation. A temporary one leaves the list and its memory ends with the process. A permanent
+   * one loses its messages, its documents, and its stored files from the profile, because pi-durable has no API
+   * to remove a conversation.
+   */
+  async remove(id: number): Promise<boolean> {
+    const conversation = await this.handle(id);
+    if (!conversation) return false;
+    const view = await conversation.viewState(context);
+    const live = view.value.docs["pi.live"] as LiveState | undefined;
+    view.dispose();
+    if (live?.run !== undefined) throw new Refused("Wait for the answer to finish before deleting this conversation.");
+
+    const { entries } = await conversation.context(context);
+    const files = entries.flatMap((entry) => (entry.kind === MESSAGE_KIND ? (entry.data as MessageData).files.map((file) => file.id) : []));
+    if (!this.temporary) this.deleteRows(id);
+
+    await this.harness.commit(async (tx) => {
+      const index = await tx.doc(ConversationIndex);
+      const at = index.items.findIndex((item) => item.id === id);
+      if (at >= 0) index.items.splice(at, 1);
+    }, context);
+
+    if (this.filesDir) await Promise.all(files.map((name) => rm(join(this.filesDir!, name), { force: true })));
+    this.removed.add(id);
+    return true;
+  }
+
+  /** Delete one conversation's rows, and the rows of its documents, in the profile database. */
+  private deleteRows(id: number): void {
+    const database = new DatabaseSync(this.databasePath!, { timeout: 5_000 });
+    try {
+      database.exec("BEGIN IMMEDIATE");
+      const documents = "SELECT id FROM documents WHERE scope_kind = 'conversation' AND owner_id = " + Number(id);
+      database.exec(`DELETE FROM document_revisions WHERE document_id IN (${documents})`);
+      database.exec(`DELETE FROM documents WHERE scope_kind = 'conversation' AND owner_id = ${Number(id)}`);
+      for (const table of ["entries", "submissions", "tasks"]) {
+        database.exec(`DELETE FROM ${table} WHERE conversation_id = ${Number(id)}`);
+      }
+      database.exec(`DELETE FROM record_ids WHERE id IN (${documents})`);
+      database.exec(`DELETE FROM conversations WHERE id = ${Number(id)}`);
+      database.exec(`DELETE FROM record_ids WHERE id = ${Number(id)} AND record_type = 'conversation'`);
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw new Error(`Deleting conversation ${id} from ${this.databasePath} failed.`, { cause: error });
+    } finally {
+      database.close();
+    }
+  }
+}
+
+/** Everything the HTTP layer needs: the two stores, the profile's files, and the Exa account. */
+export class Chat {
+  private constructor(
+    readonly threads: Threads,
+    readonly temporary: Threads,
+    private readonly filesDir: string,
+    readonly exa: ExaAuth,
+  ) {}
+
+  static async open(config: Config): Promise<Chat> {
+    const models = createModels();
+    models.setProvider(openrouterProvider());
+    const refresh = await models.refresh({ providers: ["openrouter"] });
+    if (!models.getModel("openrouter", config.model)) {
+      throw new Error(
+        `FINROD_MODEL "${config.model}" is not in the OpenRouter catalog. Set FINROD_MODEL to an OpenRouter model ID. ` +
+          `Catalog refresh result: ${JSON.stringify(refresh)}`,
+      );
+    }
+    const dir = join(config.dataDir, "profiles", config.profile);
+    const files = join(dir, "files");
+    await mkdir(files, { recursive: true, mode: 0o700 });
+    const databasePath = join(dir, "finrod.sqlite");
+    const exa = new ExaAuth(join(dir, "exa-oauth.json"), config.publicUrl);
+    const registry = createRegistry();
+    registry.install(research(exa));
+    const model = { provider: "openrouter", modelId: config.model };
+    const threads = await Threads.open({
+      models,
+      registry,
+      model,
+      storage: await openNodeSqliteStorage(databasePath),
+      filesDir: files,
+      databasePath,
+    });
+    // Temporary conversations exist only while the process runs.
+    const temporary = await Threads.open({ models, registry, model, storage: await openNodeSqliteStorage(":memory:") });
+    return new Chat(threads, temporary, files, exa);
+  }
+
+  /** Settles when the permanent store closes; `failed` means the process must restart. */
+  get closed() {
+    return this.threads.closed;
+  }
+
+  async close() {
+    await this.threads.close();
+    await this.temporary.close();
+  }
+
   /**
    * Store an uploaded file as the profile's original and return what the model needs from it. Rejects a file
    * that is not an image, a PDF, or plain text.
@@ -156,48 +315,9 @@ export class Chat {
     return describeStoredFile(this.filesDir, id, name);
   }
 
-  /** Image pixels and document text as the model receives them. */
-  private async contentOf(text: string, files: readonly Attachment[]): Promise<(TextContent | ImageContent)[]> {
-    const content: (TextContent | ImageContent)[] = [];
-    if (text) content.push({ type: "text", text });
-    for (const file of files) {
-      if (file.kind === "image") {
-        const bytes = await readStoredFile(this.filesDir, file.id);
-        content.push({ type: "image", data: bytes.toString("base64"), mimeType: file.mime });
-      } else if (file.text) {
-        content.push({ type: "text", text: `--- ${file.name} ---\n${file.text}` });
-      }
-    }
-    return content;
-  }
-
   /** One stored original, for the app to show. */
   readFile(id: string): Promise<Buffer> {
     return readStoredFile(this.filesDir, id);
-  }
-
-  /**
-   * Store a vote on an answer as a passive entry the model never sees. Returns false when the conversation or the
-   * answer does not exist.
-   */
-  async rate(id: number, target: number, vote: Vote | null): Promise<boolean> {
-    const conversation = await this.harness.conversation(id as ConversationId, context);
-    if (!conversation) return false;
-    const { entries } = await conversation.context(context);
-    if (!entries.some((entry) => entry.id === target && entry.kind === "pi.assistant")) return false;
-    const data: FeedbackData = { target, vote };
-    await conversation.submit({ type: "write", entry: { kind: FEEDBACK, data } }, context);
-    return true;
-  }
-
-  /** Follow one conversation; `onView` gets the current view, then every committed change. */
-  async watch(id: number, onView: (view: ConversationView) => void): Promise<(() => Promise<unknown>) | undefined> {
-    const conversation = await this.harness.conversation(id as ConversationId, context);
-    if (!conversation) return undefined;
-    const watch = await conversation.watch(context);
-    onView(watch.value);
-    watch.start(async (view) => onView(view));
-    return () => watch.stop();
   }
 }
 

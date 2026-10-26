@@ -17,6 +17,8 @@
 <body>
   <aside id="sidebar" aria-label="Conversas">
     <button id="new" type="button">Nova conversa</button>
+    <button id="temporary" type="button">Conversa temporária</button>
+    <p class="hint">Não é guardada no servidor. Termina quando o Finrod reiniciar.</p>
     <nav id="list"></nav>
     <button id="exa" type="button" hidden></button>
   </aside>
@@ -27,6 +29,9 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
       <h1 id="title">Finrod</h1>
+      <button id="delete" type="button" aria-label="Excluir conversa" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>
+      </button>
     </header>
     <section id="messages" aria-live="polite"></section>
     <form id="composer">

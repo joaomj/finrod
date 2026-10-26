@@ -27,6 +27,13 @@ svg { width: 1.4rem; height: 1.4rem; fill: none; stroke: currentColor; stroke-wi
 body.open #sidebar { transform: none; }
 #scrim { position: fixed; inset: 0; z-index: 1; background: #0008; }
 #new { padding: .7rem .9rem; border: 1px solid var(--line); border-radius: .7rem; text-align: left; }
+#temporary { padding: .55rem .9rem; border-radius: .7rem; text-align: left; color: var(--muted); font-size: .9rem; }
+.hint { margin: 0 .9rem .4rem; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.temp { color: var(--muted); font-size: .7rem; border: 1px solid var(--line); border-radius: .4rem; padding: 0 .3rem; }
+#delete { margin-left: auto; padding: .5rem; display: flex; color: var(--muted); }
+#delete[hidden] { display: none; }
+body.temporary header { border-bottom-color: var(--muted); }
+body.temporary h1::after { content: " · temporária"; color: var(--muted); font-weight: 400; font-size: .8rem; }
 #list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 #list a {
   display: block; padding: .6rem .9rem; border-radius: .6rem; color: var(--muted); text-decoration: none;

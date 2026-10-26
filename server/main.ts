@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
-import { Chat, liveOf, messagesOf } from "./chat.js";
+import { Chat, liveOf, messagesOf, Refused, type Threads } from "./chat.js";
 import { loadConfig } from "./config.js";
 import { EXA_CALLBACK_PATH } from "./exa-auth.js";
 import { isStoredName, MAX_FILE_BYTES, mimeOfStoredName, type Attachment } from "./files.js";
@@ -77,7 +77,7 @@ function json(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(body));
 }
 
-async function events(request: IncomingMessage, response: ServerResponse, id: number) {
+async function events(request: IncomingMessage, response: ServerResponse, store: Threads, id: number) {
   response.writeHead(200, {
     "content-type": "text/event-stream",
     "cache-control": "no-store",
@@ -85,7 +85,7 @@ async function events(request: IncomingMessage, response: ServerResponse, id: nu
   });
   let lastMessages = "";
   let lastLive = "";
-  const stop = await chat.watch(id, (view) => {
+  const stop = await store.watch(id, (view) => {
     const messages = JSON.stringify(messagesOf(view));
     const live = JSON.stringify(liveOf(view));
     if (messages !== lastMessages) response.write(`event: messages\ndata: ${messages}\n\n`);
@@ -151,19 +151,28 @@ async function api(request: IncomingMessage, response: ServerResponse, path: str
     await chat.exa.disconnect();
     return json(response, 200, {});
   }
-  if (path === "/api/conversations" && request.method === "GET") return json(response, 200, await chat.list());
-  if (path === "/api/conversations" && request.method === "POST") return json(response, 201, { id: await chat.create() });
-  const vote = /^\/api\/conversations\/(\d+)\/messages\/(\d+)\/vote$/.exec(path);
+  // Temporary conversations share the routes of permanent ones, under their own prefix.
+  const temporary = path === "/api/temporary" || path.startsWith("/api/temporary/");
+  const rest = temporary ? `/api${path.slice("/api/temporary".length)}` : path;
+  const store = temporary ? chat.temporary : chat.threads;
+  if (rest === "/api/conversations" && request.method === "GET") return json(response, 200, await store.list());
+  if (rest === "/api/conversations" && request.method === "POST") return json(response, 201, { id: await store.create() });
+  const vote = /^\/api\/conversations\/(\d+)\/messages\/(\d+)\/vote$/.exec(rest);
   if (vote && request.method === "PUT") {
     const body = await readJson(request);
     if (body.vote !== "up" && body.vote !== "down" && body.vote !== null) throw new HttpError(400, 'vote must be "up", "down", or null.');
-    if (!(await chat.rate(Number(vote[1]), Number(vote[2]), body.vote))) throw new HttpError(404, "Answer not found.");
+    if (!(await store.rate(Number(vote[1]), Number(vote[2]), body.vote))) throw new HttpError(404, "Answer not found.");
     return json(response, 200, {});
   }
-  const match = /^\/api\/conversations\/(\d+)\/(messages|events)$/.exec(path);
+  const conversation = /^\/api\/conversations\/(\d+)$/.exec(rest);
+  if (conversation && request.method === "DELETE") {
+    if (!(await store.remove(Number(conversation[1])))) throw new HttpError(404, "Conversation not found.");
+    return json(response, 200, {});
+  }
+  const match = /^\/api\/conversations\/(\d+)\/(messages|events)$/.exec(rest);
   if (!match) throw new HttpError(404, "Not found.");
   const id = Number(match[1]);
-  if (match[2] === "events" && request.method === "GET") return events(request, response, id);
+  if (match[2] === "events" && request.method === "GET") return events(request, response, store, id);
   if (match[2] === "messages" && request.method === "POST") {
     const body = await readJson(request);
     const text = typeof body.text === "string" ? body.text.trim() : "";
@@ -172,7 +181,7 @@ async function api(request: IncomingMessage, response: ServerResponse, path: str
     if (text.length > MAX_MESSAGE_CHARS) throw new HttpError(400, `Message must be at most ${MAX_MESSAGE_CHARS} characters.`);
     if (!text && wanted.length === 0) throw new HttpError(400, "Message must have text or a file.");
     if (!/^[A-Za-z0-9-]{8,64}$/.test(requestId)) throw new HttpError(400, "requestId must be 8-64 letters, digits, or hyphens.");
-    if (!(await chat.send(id, text, await filesOf(wanted), requestId))) throw new HttpError(404, "Conversation not found.");
+    if (!(await store.send(id, text, await filesOf(wanted), requestId))) throw new HttpError(404, "Conversation not found.");
     return json(response, 202, {});
   }
   throw new HttpError(405, "Method not allowed.");
@@ -200,6 +209,7 @@ const server = createServer(async (request, response) => {
     else await file(response, path);
   } catch (error) {
     if (error instanceof HttpError) return json(response, error.status, { error: error.message });
+    if (error instanceof Refused) return json(response, 409, { error: error.message });
     console.error(`${request.method} ${path} failed:`, error);
     if (!response.headersSent) json(response, 500, { error: "Internal error." });
     else response.end();

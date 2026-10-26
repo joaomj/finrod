@@ -1,6 +1,6 @@
 import MarkdownIt from "markdown-it";
 
-type Summary = { id: number; title: string; updatedAt: number };
+type Summary = { id: number; title: string; updatedAt: number; temporary: boolean };
 type Vote = "up" | "down";
 type Source = { title: string; url: string };
 type SentFile = { id: string; kind: "image" | "document"; name: string; mime: string; size: number; unreadable?: string };
@@ -40,6 +40,7 @@ let pending: { text: string; files: SentFile[] } | undefined;
 let failure: string | undefined;
 let events: EventSource | undefined;
 let exaConnected = false;
+let temporary = false;
 let attachments: Pending[] = [];
 
 async function refreshExa() {
@@ -67,6 +68,12 @@ async function toggleExa() {
   }
 }
 
+/** Route prefix of a conversation: temporary ones live under their own path. */
+function base(id: number | undefined, isTemporary = temporary): string {
+  if (id === undefined) return isTemporary ? "/api/temporary/conversations" : "/api/conversations";
+  return isTemporary ? `/api/temporary/conversations/${id}` : `/api/conversations/${id}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) };
   if (typeof init?.body === "string" || init?.body === undefined) headers["content-type"] = "application/json";
@@ -85,13 +92,21 @@ function renderList() {
   list.replaceChildren(
     ...conversations.map((item) => {
       const link = document.createElement("a");
-      link.href = `#/c/${item.id}`;
+      link.href = item.temporary ? `#/t/${item.id}` : `#/c/${item.id}`;
       link.textContent = item.title || "Nova conversa";
-      if (item.id === current) link.setAttribute("aria-current", "page");
+      if (item.temporary) {
+        const mark = document.createElement("span");
+        mark.className = "temp";
+        mark.textContent = "temporária";
+        link.append(" ", mark);
+      }
+      if (item.id === current && item.temporary === temporary) link.setAttribute("aria-current", "page");
       return link;
     }),
   );
-  title.textContent = conversations.find((item) => item.id === current)?.title || "Finrod";
+  const shown = conversations.find((item) => item.id === current && item.temporary === temporary);
+  title.textContent = shown?.title || (temporary ? "Conversa temporária" : "Finrod");
+  document.body.classList.toggle("temporary", temporary);
 }
 
 function size(bytes: number): string {
@@ -126,13 +141,16 @@ function bubble(role: "user" | "assistant", text: string, error?: string, files?
     image.loading = "lazy";
     el.append(image);
   }
-  if (role === "user" && text) {
-    const body = document.createElement("p");
-    body.textContent = text;
-    el.append(body);
+  if (role === "user") {
+    if (text) {
+      const body = document.createElement("p");
+      body.textContent = text;
+      el.append(body);
+    }
+    for (const file of files ?? []) if (file.kind === "document") el.append(fileChip(file));
+  } else if (text) {
+    el.innerHTML = markdown.render(text);
   }
-  for (const file of files ?? []) if (file.kind === "document") el.append(fileChip(file));
-  else if (text) el.innerHTML = markdown.render(text);
   if (error) {
     const note = document.createElement("p");
     note.className = "error";
@@ -185,7 +203,7 @@ function feedback(message: Message) {
 async function rate(message: Message, vote: Vote | null) {
   if (current === undefined) return;
   try {
-    await request(`/api/conversations/${current}/messages/${message.id}/vote`, { method: "PUT", body: JSON.stringify({ vote }) });
+    await request(`${base(current)}/messages/${message.id}/vote`, { method: "PUT", body: JSON.stringify({ vote }) });
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
     renderMessages();
@@ -223,27 +241,36 @@ function renderMessages() {
 
 function updateSend() {
   const busy = attachments.some((item) => item.sending);
+  attach.disabled = temporary;
+  attach.title = temporary ? "Conversas temporárias não guardam arquivos" : "";
   send.disabled = (!input.value.trim() && attachments.length === 0) || pending !== undefined || busy;
 }
 
 async function refreshList() {
-  conversations = await request<Summary[]>("/api/conversations");
+  const [permanent, temporaryOnes] = await Promise.all([
+    request<Summary[]>("/api/conversations"),
+    request<Summary[]>("/api/temporary/conversations"),
+  ]);
+  conversations = [...permanent, ...temporaryOnes].sort((a, b) => b.updatedAt - a.updatedAt);
   renderList();
 }
 
-function open(id: number | undefined) {
+function open(id: number | undefined, isTemporary = false) {
   events?.close();
   events = undefined;
   current = id;
+  temporary = isTemporary;
   messages = [];
   live = { busy: false };
   pending = undefined;
   failure = undefined;
   renderList();
   renderMessages();
+  updateSend();
+  $("delete").hidden = id === undefined;
   setMenu(false);
   if (id === undefined) return;
-  events = new EventSource(`/api/conversations/${id}/events`);
+  events = new EventSource(`${base(id)}/events`);
   events.addEventListener("messages", (event) => {
     messages = JSON.parse((event as MessageEvent<string>).data) as Message[];
     const sent = pending;
@@ -262,8 +289,11 @@ function open(id: number | undefined) {
 }
 
 function route() {
+  const temporaryMatch = /^#\/t\/(\d+)$/.exec(location.hash);
+  if (temporaryMatch) return open(Number(temporaryMatch[1]), true);
   const match = /^#\/c\/(\d+)$/.exec(location.hash);
-  open(match ? Number(match[1]) : undefined);
+  // No hash is a new, permanent conversation, whatever kind was open before.
+  open(match ? Number(match[1]) : undefined, false);
 }
 
 async function submit() {
@@ -281,14 +311,14 @@ async function submit() {
   try {
     let id = current;
     if (id === undefined) {
-      id = (await request<{ id: number }>("/api/conversations", { method: "POST", body: "{}" })).id;
-      history.replaceState(null, "", `#/c/${id}`);
+      id = (await request<{ id: number }>(base(undefined), { method: "POST", body: "{}" })).id;
+      history.replaceState(null, "", temporary ? `#/t/${id}` : `#/c/${id}`);
       const keep = pending;
-      open(id);
+      open(id, temporary);
       pending = keep;
       renderMessages();
     }
-    await request(`/api/conversations/${id}/messages`, {
+    await request(`${base(id)}/messages`, {
       method: "POST",
       body: JSON.stringify({
         text,
@@ -389,6 +419,34 @@ $("new").addEventListener("click", () => {
   if (location.hash) location.hash = "";
   else open(undefined);
   input.focus();
+});
+async function remove() {
+  if (current === undefined) return;
+  const question = temporary
+    ? "Descartar esta conversa temporária? Ela não pode ser recuperada."
+    : "Excluir esta conversa? As mensagens e os arquivos serão apagados e não podem ser recuperados.";
+  if (!confirm(question)) return;
+  try {
+    await request(base(current), { method: "DELETE" });
+    await refreshList();
+    location.hash = "";
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+    renderMessages();
+  }
+}
+
+$("delete").addEventListener("click", () => void remove());
+$("temporary").addEventListener("click", async () => {
+  try {
+    const id = (await request<{ id: number }>(base(undefined, true), { method: "POST", body: "{}" })).id;
+    await refreshList();
+    location.hash = `#/t/${id}`;
+    input.focus();
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+    renderMessages();
+  }
 });
 exa.addEventListener("click", () => void toggleExa());
 attach.addEventListener("click", () => picker.click());
