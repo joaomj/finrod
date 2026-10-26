@@ -61,8 +61,10 @@ Chats, files, and memory stay on the server as files the user owns.
 | Web research | The assistant can search the web and cite its sources. |
 | Raw logs | Every profile keeps an append-only log with stable message identifiers. V3 memory cites these identifiers. |
 | Feedback | Each answer has thumbs-up and thumbs-down buttons. Votes are stored with the message they rate. |
+| Delete | Delete a conversation. It leaves the list and nothing of it stays in the profile. |
+| Temporary conversations | Start a conversation that is never written to disk, so a sensitive exchange does not stay in the history. It ends when Finrod restarts. |
 | Access boundary | A device outside the tailnet cannot reach Finrod. |
-| Restart safety | A server reboot loses no committed log entries. An answer cut off by a restart shows as interrupted, not as complete. |
+| Restart safety | A server reboot loses no committed log entries. An answer cut off by a restart shows as interrupted, not as complete. Temporary conversations are the exception: they exist only while Finrod runs. |
 
 ## Backend
 
@@ -94,6 +96,36 @@ Chats, files, and memory stay on the server as files the user owns.
   Finrod only needs the API key.
 - The provider still receives the context and audio of each request.
 - Finrod sends a request only the context that request needs.
+
+## Conversation lifetime decision
+
+- Any conversation can be deleted, temporary or not. Deleting removes
+  its messages, its votes, and its stored originals from the profile.
+  There is no undo, and the app asks before deleting.
+- Deletion is the one case where the append-only log loses entries. The
+  log stays append-only while a conversation exists; deleting it removes
+  its entries rather than hiding them.
+- A temporary conversation is never written to disk. It lives in an
+  in-memory store that ends with the process, so closing the app leaves
+  nothing behind and a restart loses it. Verified 2026-10-25: the
+  harness opens on an in-memory database (":memory:") and works.
+- Finrod does not guess when a conversation is closed. A phone browser
+  gives no dependable close signal, so nothing that looks temporary may
+  sit on disk waiting for one.
+- A restart loses an unfinished answer in a temporary conversation
+  without an interrupted marker. That is the accepted cost of never
+  writing it down, and it is the opposite of the restart safety a
+  normal conversation gets.
+- A temporary conversation is marked in the list and in the chat view,
+  so an exchange is never mistaken for a permanent one.
+- Deleting a permanent conversation is Finrod's own work. pi-durable
+  1.4.0 has no API to remove a conversation, so Finrod removes the
+  conversation's rows from the profile database and its files from the
+  files directory. Temporary conversations need none of this: they are
+  discarded with the process.
+- This applies with a remote model too. Temporary conversations reduce
+  what stays on the server; they do not change what a model provider
+  receives for the request, which is covered by the ZDR setting.
 
 ## Attachments decision
 
