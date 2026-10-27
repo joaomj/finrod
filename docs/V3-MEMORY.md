@@ -29,4 +29,5 @@ Finrod remembers the user across chats. Memory is portable, auditable, traceable
 ## Relation to other phases
 
 - V1 must preserve raw logs with stable identifiers.
+- Raw logs keep voice transcripts, not audio. See [UX direction](UX-DIRECTION.md#voice).
 - V2 connectors may supply facts that memory cites.

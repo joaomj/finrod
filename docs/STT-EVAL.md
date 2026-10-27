@@ -61,4 +61,5 @@ or speed grounds.
 ## References
 
 - [PRD-v030](PRD-v030.md): transcription decision.
-- [V3 sketch](V3-MEMORY.md): raw logs keep audio plus transcript.
+- [UX direction](UX-DIRECTION.md#voice): voice plan after v0.3.0. Raw logs
+  keep the transcript and the server deletes the audio.

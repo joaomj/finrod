@@ -8,6 +8,7 @@ over the tailnet. This file is the phase index.
 | Phase | Document | State |
 | --- | --- | --- |
 | v0.3.0 home-server web app | [PRD-v030.md](PRD-v030.md) | Built, not released |
+| Post-v0.3.0 UX: voice, continuous stream, multiple users, encryption at rest | [UX-DIRECTION.md](UX-DIRECTION.md) | Direction |
 | V2 connectors (MCP, OAuth, approval-gated writes) | [V2-CONNECTORS.md](V2-CONNECTORS.md) | Sketch |
 | V3 memory (portable second brain) | [V3-MEMORY.md](V3-MEMORY.md) | Sketch, intentionally imprecise |
 
