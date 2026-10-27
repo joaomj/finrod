@@ -1,112 +1,119 @@
 # Operations
 
-Finrod is a static browser application. Users need an HTTPS URL and personal
-provider access, not a VPS, service account, or conversation backend.
-See [Browser](BROWSER.md) for Settings, local preview, and storage behavior.
+Finrod runs on the home server as a systemd user service. The server runs
+released builds only. Code is written and built elsewhere, and GitHub Actions
+builds each release archive.
 
-## Static hosting
+## Configuration
 
-The current preview is **https://finrod-preview.pages.dev** on Cloudflare Pages.
-Keep that stable origin for daily use. Deployment-specific URLs have independent
-browser histories and credentials.
+Finrod reads its settings from the environment and refuses to start when one
+is wrong. The error names the setting and how to fix it.
 
-Build from the selected checkout with locked dependencies:
+| Setting | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `OPENROUTER_API_KEY` | Yes | None | OpenRouter API key |
+| `FINROD_PUBLIC_URL` | For Exa sign-in | `http://127.0.0.1:<port>` | HTTPS origin the phone opens; Exa sign-in returns there |
+| `FINROD_MODEL` | No | `deepseek/deepseek-v4.1-flash-1017` | OpenRouter model ID |
+| `FINROD_PORT` | No | `8787` | Port on `127.0.0.1` |
+| `FINROD_DATA_DIR` | No | `.finrod` | Data directory; the service sets it |
+| `FINROD_PROFILE` | No | `default` | Profile name: lowercase letters, digits, hyphens |
 
-```sh
-npm ci --ignore-scripts --include=dev --no-audit --no-fund
-npm run build
+Zero data retention is an OpenRouter account setting. Enable it there before
+use. Finrod does not set it per request.
+
+## Layout on the server
+
+```text
+~/.local/opt/node/                   Node 22.19 or later, installed by hand
+~/.local/bin/finrod-update           update script
+~/.config/systemd/user/              finrod.service, finrod-update.service, finrod-update.timer
+~/.local/share/finrod/
+  finrod.env                         settings, mode 0600
+  data/                              all chats and files (the only state)
+  releases/finrod-vX.Y.Z/            unpacked releases, the newest 3 kept
+  current -> releases/finrod-vX.Y.Z  the running release
 ```
 
-Publish the complete `web-dist/` directory on an HTTPS static host. Include the
-JavaScript chunks, styles, HTML, and SQLite WebAssembly used for earlier browser
-migration. Do not publish the checkout, dependencies, private exports, credentials,
-or screenshots. The deployed application has no functions, provider proxy, or
-hosting credentials. GitHub Actions uses separate secrets only to upload assets.
+Updates and rollbacks change only `releases/` and `current`. They do not
+touch `finrod.env` or `data/`.
 
-Published, checked stable releases automatically update the existing Pages origin.
-The deployment workflow selects the exact latest release commit and verifies all
-hosted assets after upload. It does not deploy ordinary commits or PRs.
-Other hosting changes and manual uploads require separate approval.
+## First install
 
-## Deployment credentials
+Prerequisites: a published release with a `finrod-vX.Y.Z.tar.gz` archive,
+lingering enabled for the user (`loginctl enable-linger`), and Tailscale on
+the server.
 
-The repository uses two GitHub Actions secrets:
+1. Install Node 22.19 or later under `~/.local/opt/node`.
+2. Copy `deploy/finrod-update` to `~/.local/bin/` and make it executable.
+3. Copy the three files in `deploy/systemd/` to `~/.config/systemd/user/`.
+4. Write `~/.local/share/finrod/finrod.env` with `OPENROUTER_API_KEY` and
+   `FINROD_PUBLIC_URL`. Set its mode to `0600`.
+5. Run `systemctl --user daemon-reload`.
+6. Run `systemctl --user enable finrod.service finrod-update.timer`.
+7. Run `finrod-update`. It installs the latest release and starts Finrod.
+8. Publish `127.0.0.1:8787` over HTTPS with Tailscale Serve, at the address
+   in `FINROD_PUBLIC_URL`.
+9. On the iPhone, open that address in Safari and use **Add to Home Screen**.
 
-- `CLOUDFLARE_API_TOKEN`: a token with Pages Read/Edit access to the hosting account.
-- `CLOUDFLARE_ACCOUNT_ID`: the account containing `finrod-preview`.
-
-In Cloudflare, open **Account API tokens** and create a custom token. Under
-**Developer Platform → Pages**, select **Read** and **Edit**. Restrict access to
-the hosting account. Other Pages products, DNS, and Workers permissions are not
-needed. The token can manage Pages within that account; it is not restricted to
-one Pages project.
-
-Save the values under GitHub **Settings → Secrets and variables → Actions →
-Repository secrets**. Keep token values out of chat, shell history, Git, application
-files, and diagnostic exports. Do not save model or research credentials there.
-
-The secrets are configured, and the GitHub-hosted upload has succeeded.
-See [Validation](VALIDATION.md#github-hosted-deployment-2026-10-12) for evidence.
-Rotate an expired or revoked token by replacing the repository secret. After
-approval, retry the latest published release through the deployment
-workflow. Secret
-replacement alone does not upload files.
+Success: `finrod-update` prints `Finrod vX.Y.Z is installed and answering.`
 
 ## Updates
 
-1. Export current chats before changing an installation or storage format.
-2. Review checks and known migration limits for the selected revision.
-3. Approve and publish the version through the release workflow.
-4. Confirm the automatic deployment and hosted-file verification succeeded.
-5. Reopen the stable origin and verify chat continuity and research.
+The timer runs `finrod-update` once a day. To update now from another
+machine:
 
-Do not clear site data as an update step. Earlier browser records remain recovery
-copies after migration. An older application version may not read newer storage.
-Keep a usable export before rollback; do not assume rollback is automatic.
+```sh
+tailscale ssh <user>@<server> finrod-update
+```
+
+`finrod-update` does these steps:
+
+1. Read the latest release from the public GitHub API. No credentials.
+2. Download the archive and its SHA-256 file, and verify the checksum.
+3. Unpack the release and point `current` at it.
+4. Restart Finrod and wait up to 30 seconds for it to answer on `127.0.0.1`.
+5. If it does not answer, point `current` back at the previous release and
+   restart again. The script exits with an error in both failure cases.
+
+Only one update runs at a time. Node updates are manual.
+
+**Caution:** a restart ends all temporary conversations. Permanent
+conversations continue; an answer cut off by the restart shows as
+interrupted.
+
+## Releases
+
+Pushing a `vX.Y.Z` tag that matches `package.json` runs the checks and then
+publishes a GitHub release with the archive and its checksum. The archive
+holds `dist/`, production `node_modules`, and `deploy/`. The server never
+runs npm or builds anything.
 
 ## Backup and restore
 
-In Settings, select **Export all chats**. Keep `finrod-history.json` outside Git
-and store it privately. The file includes chat text, research results, titles,
-feedback, and completion state. It is not encrypted or a complete execution log.
-Saved provider keys are excluded.
+The data directory is the only state. Back it up with the service stopped,
+so the SQLite file is consistent:
 
-**Warning:** restore replaces all local chats. Export current history first if
-those chats must remain available.
+```sh
+systemctl --user stop finrod.service
+tar -C ~/.local/share/finrod -czf finrod-data-$(date +%F).tar.gz data
+systemctl --user start finrod.service
+```
 
-Select **Restore backup**, choose the file, and confirm replacement. Invalid
-backups leave current history unchanged. Restore marks unfinished work interrupted
-without replaying it. Restoring a backup does not restore saved provider keys.
-Configure keys separately when moving to another browser or origin.
+**Warning:** the backup holds all chats, files, and the Exa sign-in in plain
+form. Store it privately and keep it out of Git.
 
-Site-data deletion, browser storage eviction, device loss, and private-session
-termination can remove local data. Export/restore helps only when a usable backup
-exists. There is no automatic synchronization or remote recovery service.
+To restore, stop the service, replace `data/` with the backup's copy, and
+start the service. Restoring replaces every conversation on the server.
 
 ## Troubleshooting
 
-- **Another Finrod page:** close the other tab, then reload. Only one page can write history.
-- **Saving failed:** stop using the page, check device storage, and reload. Do not clear data to hide the error.
-- **Research rate limit:** add a personal Exa key or wait for provider access to recover.
-- **Rejected key:** check the respective provider account and replace the key in Settings.
-- **Interrupted answer:** inspect saved progress and submit a new message explicitly. Finrod does not automatically retry unfinished work.
-- **Missing history at another URL:** return to the original origin, export there, then restore at the intended origin.
-- **Release not deployed:** inspect **Deploy published release to Cloudflare** in GitHub Actions. Check secret configuration, the latest-release selection, and successful tag CI.
-- **Deployment verification failed:** inspect whether upload completed before the failure. Do not assume the old site remains active or repeat a mutation blindly.
-
-A configured Exa key is not silently removed after failure. A research connection
-failure prevents inference from starting. Cancellation does not guarantee that
-external work or charges stop. Source links do not establish answer accuracy.
-
-## Privacy
-
-The browser stores readable history and credentials. Protect the device, browser
-profile, backups, and update channel. Do not share diagnostic content without
-checking it for private messages. Application redaction excludes configured keys;
-it does not guarantee that arbitrary user text contains no sensitive information.
-
-OpenRouter and its selected inference provider receive submitted context. Exa
-receives research queries and requested URLs. Their billing, retention, and
-availability policies are separate from local browser storage.
-
-See [Validation](VALIDATION.md) for completed checks and remaining phone gaps.
+- **Finrod does not start:** run `journalctl --user -u finrod.service`. A
+  configuration error names the setting to fix.
+- **Model not found at startup:** set `FINROD_MODEL` to a current OpenRouter
+  model ID.
+- **Update failed:** run `journalctl --user -u finrod-update.service`, or run
+  `finrod-update` by hand to see its message.
+- **Research rate limit:** connect your own Exa account from the app menu.
+- **Exa sign-in expired:** reconnect Exa from the app menu.
+- **Storage failure:** Finrod exits so systemd restarts it. Check disk space
+  and the journal.

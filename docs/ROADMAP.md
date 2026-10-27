@@ -1,13 +1,13 @@
 # Roadmap
 
 Finrod is a personal AI assistant on the home server, used as a web app
-over the tailnet. The project `AGENTS.md` was removed; this file is the phase index.
+over the tailnet. This file is the phase index.
 
 ## Phases
 
 | Phase | Document | State |
 | --- | --- | --- |
-| v0.3.0 home-server web app | [PRD-v030.md](PRD-v030.md) | Agreed, not implemented |
+| v0.3.0 home-server web app | [PRD-v030.md](PRD-v030.md) | Built, not released |
 | V2 connectors (MCP, OAuth, approval-gated writes) | [V2-CONNECTORS.md](V2-CONNECTORS.md) | Sketch |
 | V3 memory (portable second brain) | [V3-MEMORY.md](V3-MEMORY.md) | Sketch, intentionally imprecise |
 
@@ -48,12 +48,9 @@ max tokens, or it returns silence.
 
 ## Retired: v0.2.0 browser product
 
-- The browser-only chat ([PRD.md](PRD.md), [ARCHITECTURE.md](ARCHITECTURE.md),
-  [BROWSER.md](BROWSER.md)) is retired in favor of the server product.
+- The browser-only chat is retired in favor of the server product. Its
+  documents are in [retired/](retired/).
 - Its browser history was test data and is disposable. There is no migration.
-- Static hosting in [OPERATIONS.md](OPERATIONS.md) describes the old product
-  until replaced.
-- [VALIDATION.md](VALIDATION.md) records v0.2.0 observations only.
 
 ## References
 

@@ -164,7 +164,7 @@ In **Settings**, select **Export all chats** to download `finrod-history.json`.
 The version 2 backup includes all chats, IDs, titles, and the active selection.
 Keep this file private: it includes conversation and tool content and is not encrypted.
 The backup is not a complete browser or execution log. Planned local encryption
-and complete conversation-log export are defined in [Roadmap](ROADMAP.md).
+and complete conversation-log export are defined in [Roadmap](../ROADMAP.md).
 The saved model and Exa keys are not included. Export is unavailable during a turn.
 
 In **Settings**, select **Restore backup**, choose a file, and confirm replacement.

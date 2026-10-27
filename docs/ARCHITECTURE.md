@@ -1,123 +1,104 @@
 # Architecture
 
-Finrod runs its chat and research logic in the browser. Static hosting serves
-application files; it does not process conversations or store chat history.
-OpenRouter provides inference, and Exa provides research through Model Context
-Protocol (MCP). No Finrod conversation backend is required.
+Finrod is one Node process on the home server. It serves the web app and an
+HTTP API on `127.0.0.1`, and Tailscale Serve publishes it over HTTPS on the
+tailnet. The server owns all conversation state. The browser only shows it.
 
-Pi agent-core owns model streaming, tool execution, and cancellation. Finrod owns
-browser persistence, chat selection, lifecycle handling, and recovery presentation.
-Pi is an implementation choice, not a product requirement. Finrod does not build
-a second agent engine or expose a coding environment.
+The durable pi harness (`@earendil-works/pi-durable`) runs the agent: model
+streaming, tool calls, retries, and the restart-safe log. Finrod adds the web
+app, the HTTP layer, file handling, feedback, deletion, and temporary
+conversations.
 
 ## Components
 
-| Component | Responsibility | Implementation |
+| Component | Responsibility | File |
 | --- | --- | --- |
-| Chat interface | Composer, Settings, browser lifecycle, and writer lock | `web/main.ts`, `web/index.html`, `web/style.css` |
-| Conversation runtime | Agent execution, saved progress, interruption, and chat selection | `web/runtime.ts` |
-| Local storage | IndexedDB transactions, chat records, titles, and feedback | `web/storage.ts` |
-| History contracts | Validate messages and backups; recover unfinished work | `web/history.ts`, `web/sessions.ts` |
-| Model access | Configure OpenRouter and the initial model | `web/model.ts` |
-| Research | Connect native Pi MCP to Exa; map tools and visible failures | `web/mcp.ts` |
-| Titles | Make one bounded, tool-free request after the first successful exchange | `web/titles.ts` |
-| Presentation | Sidebar, safe Markdown, transcript, and research activity | `web/sidebar.ts`, `web/markdown.ts`, `web/transcript.ts` |
-| Feedback | Validate votes and present an optional negative-vote comment | `web/feedback.ts`, `web/feedback-ui.ts` |
-| Credentials | Save model and research keys separately; redact configured values | `web/credentials.ts`, `web/research-key.ts`, `web/redaction.ts` |
-| Earlier browser migration | Read the original SQLite snapshot without starting requests | `web/legacy.ts` |
-| Static distribution | Bundle browser files and serve a local preview | `scripts/build-web.mjs`, `scripts/serve-web.mjs` |
+| HTTP server | Static app files, JSON API, Server-Sent Events, uploads, error mapping | `server/main.ts` |
+| Configuration | Read and validate environment settings at startup | `server/config.ts` |
+| Conversations | Permanent and temporary stores, send, vote, delete, view mapping | `server/chat.ts` |
+| Files | Type detection, stored originals, PDF and text extraction | `server/files.ts` |
+| Research | `web_search` and `web_fetch` tools through Exa MCP | `server/research.ts` |
+| Exa account | OAuth sign-in to the user's Exa account, token file | `server/exa-auth.ts` |
+| Web app | Conversation list, chat view, Markdown, composer, attachments | `app/main.ts`, `app/index.html`, `app/style.css` |
+| Build | Bundle app and server into `dist/`, version the app's script and style | `scripts/build.mjs` |
+| Release archive | Built app, production dependencies, deploy files, checksum | `scripts/package.sh` |
+| Deployment | systemd user units and the update script | `deploy/` |
 
 ## Request flow
 
-1. The user submits a message from the active chat.
-2. Finrod validates provider access and connects directly to Exa for tool schemas.
-3. Agent-core starts the turn and saves user input before inference.
-4. OpenRouter receives the active chat's model context, device date, and timezone.
-5. Agent-core streams replies and executes the two Exa tools sequentially.
-6. Finrod saves completed assistant and tool messages before execution continues.
-7. Finrod saves the final turn state and displays failures or interruptions.
-8. After the first successful exchange, a separate request generates the chat title.
+1. The app creates a conversation or opens one from the list.
+2. The app subscribes to `GET /api/conversations/<id>/events`. The server
+   sends the message list and the live status as Server-Sent Events.
+3. Files upload first, one request per file, to `POST /api/files`. The server
+   stores the original and returns a reference.
+4. The app sends `POST /api/conversations/<id>/messages` with the text, the
+   file references, and a `requestId`. A repeated `requestId` does not send
+   the message twice.
+5. pi-durable commits the message, runs the model, and commits each answer
+   part and tool result before the app shows it.
+6. The model can call `web_search` and `web_fetch`. Finrod reads the page
+   titles and URLs from those tool results and shows them as the answer's
+   sources.
 
-Title requests do not enter chat context or block another chat. Failed titles are
-not automatically retried. Feedback changes local records without a model request.
-Finrod does not submit one chat's history as another chat's context.
+Temporary conversations use the same routes under `/api/temporary/`.
 
-## Storage and recovery
+## Storage
 
-IndexedDB database `finrod-browser`, version 3, contains the chat library:
+The data directory (`FINROD_DATA_DIR`) holds one folder per profile:
 
-- `sessions`: IDs, titles, feedback, partial replies, turn state, and record counts.
-- `chatMessages`: completed messages keyed by `[session_id, message_index]`.
-- `library`: active selection and the next sequential chat ID.
+```text
+<data>/profiles/<profile>/
+  finrod.sqlite     pi-durable log: conversations, entries, documents
+  files/            stored originals, named <uuid>.<ext>, mode 0600
+  exa-oauth.json    Exa sign-in, mode 0600, present after connecting Exa
+```
 
-Writes use transactions. Normal turns append completed records rather than
-exporting a whole database. Streaming saves partial progress at most once per
-500 ms. An abrupt close can lose progress since the last completed save.
-A storage failure blocks unsafe continuation until reload.
+- Messages, answers, tool results, votes, and the conversation index are
+  entries or documents in `finrod.sqlite`.
+- A message with files is a `finrod.message` entry that lists the files.
+- A vote is a `finrod.feedback` entry. The newest vote for an answer wins.
+- Temporary conversations use a second pi-durable store in memory. Nothing of
+  them reaches disk, and they end when the process ends. They do not accept
+  files.
 
-Web Locks permits one page to write the library. A second page reports the
-conflict. Finrod cancels active work when the page becomes hidden where possible.
-Reopening marks unfinished turns interrupted and supplies explicit failed results
-for unfinished tool calls. Recovery does not replay external requests.
-Cancellation cannot guarantee that providers stop processing or cancel charges.
+### Deletion
 
-Earlier IndexedDB histories and the original Durable/SQLite browser snapshot
-migrate into chat 1. The original records remain untouched as recovery copies.
-Only the original snapshot migration loads Pi Durable, Chord, sql.js, and SQLite
-WebAssembly. Normal chat execution does not use those dependencies. The browser
-test also uses real Durable storage to create its migration input.
+pi-durable 1.4.0 has no call to remove a conversation. Finrod deletes the
+conversation's rows in one SQLite transaction, removes its stored files, and
+refuses the conversation for the rest of the process, because the harness
+still holds it in memory. A conversation that is still answering is not
+deleted.
 
-The all-chat backup uses format `finrod-phone`, version 2. Each chat contains
-version 1 history. Restore validates the complete backup before replacement and
-preserves the browser's increasing ID counter. Version 1 single-chat backups
-remain supported. Restore does not submit model or tool requests.
+## Files
 
-## Model and research access
+- Accepted types: JPEG, PNG, WebP, PDF, TXT, MD, CSV. Finrod reads the type
+  from the first bytes, not from the name or the browser's claim.
+- Limit: 20 MB per file.
+- Images go to the model as image content.
+- PDFs and text files become text on the server (`unpdf`, Node only). One
+  document sends at most 40,000 characters; a longer one is cut with a note.
+- A PDF page with no text layer is marked in the text the model gets, and the
+  message names those pages.
 
-The initial model is `anthropic/claude-haiku-5.5` through OpenRouter. Model
-configuration and tool execution use pinned Pi packages, not a separate provider
-framework. Dependency versions are locked in `package-lock.json`.
+## Model and research
 
-The native Pi MCP client connects directly to
-`https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa` over streamable HTTP.
-Only `web_search_exa` and `web_fetch_exa` are exposed. Finrod does not expose shell,
-filesystem, coding, or dynamically discovered tools.
+- The model is an OpenRouter model, `FINROD_MODEL`, through pi-ai's OpenRouter
+  provider. Startup fails if the model is not in the OpenRouter catalog.
+- Zero data retention is set in the OpenRouter account, not in Finrod.
+- Research uses Exa MCP at
+  `https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa`. Each tool call
+  opens a new connection. Without a connected Exa account, calls use Exa's
+  free tier, which is rate limited. A free-tier limit message counts as a
+  failed tool call.
+- The agent has no other tools: no shell and no file access.
 
-Pi MCP `1.1.0` needs a browser build adaptation: exclude Node-only stdio exports
-and replace HTTP stream byte counting with `TextEncoder`. The build rejects a
-changed parser rather than silently applying an incompatible adaptation.
+## Web app caching
 
-An optional personal Exa key uses the `x-api-key` header, never a URL parameter.
-Blank credentials select free, rate-limited access. A rejected keyed request
-remains a failure without fallback to free access. Known free-limit text counts
-as failed research even when Exa does not set the MCP error flag. Older saved
-results display correctly without rewriting their history.
-
-## Privacy and distribution
-
-Saved keys use localStorage, separate from conversation records. The model key
-uses `finrod.openrouter-key`; the research key uses `finrod.exa-key`. Settings
-saves keys only after **Done**. Export and restore exclude saved keys.
-Configured credential values are redacted from external results, displayed
-errors, persisted errors, title results, and feedback comments.
-
-History and saved keys are not application-encrypted. Backups contain private
-chat and tool content. Browser access, device access, hosting, and updates remain
-trust boundaries. Modified application code can access readable local data.
-Local encryption and complete diagnostic export are planned in [Roadmap](ROADMAP.md).
-
-OpenRouter and its inference provider receive submitted context. Exa receives
-queries and requested URLs. Static hosting does not hide these external requests
-or guarantee that administrators cannot change application code.
-
-`npm run build` checks browser types and writes `web-dist/`. The preview server
-serves those files only. Publish the complete directory over HTTPS for phone use.
-Use a stable origin: another origin has different local history and credentials.
-Builds must not include keys, private histories, or local configuration.
+The server tells browsers to revalidate the page on each load and to cache
+other app files for 5 minutes. The build adds a content hash to the script and
+style URLs in the page, so a new release loads the new app at once.
 
 ## References
 
-- [Product requirements](PRD.md): user outcomes and acceptance criteria.
-- [Browser](BROWSER.md): current behavior, preview, migration, and backup format.
-- [Operations](OPERATIONS.md): hosting, updates, and recovery.
-- [Validation](VALIDATION.md): observed behavior and verification limits.
+- [v0.3.0 requirements](PRD-v030.md): outcomes and decisions.
+- [Operations](OPERATIONS.md): install, update, backup, and recovery.

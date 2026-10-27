@@ -1,8 +1,7 @@
 # Product requirements: Finrod v0.3.0 (home-server web app)
 
-**Status:** agreed direction, not implemented. This file replaces
-[PRD.md](PRD.md) for v0.3.0 and later. PRD.md describes the retired v0.2.0
-browser product.
+**Status:** built, not released. This file replaces the retired v0.2.0
+[PRD](retired/PRD.md) for v0.3.0 and later.
 
 ## Result
 
@@ -35,7 +34,7 @@ Chats, files, and memory stay on the server as files the user owns.
 - Finrod is reachable only from devices on the tailnet. It has no public
   address.
 - Finrod serves HTTPS with a Tailscale-issued certificate. A secure
-  origin is required to install the web app and to record audio.
+  origin is required to install the web app.
 - The phone must have Tailscale connected to use Finrod.
 - The v0.2.0 browser history was test data. There is no migration.
 
@@ -56,7 +55,6 @@ Chats, files, and memory stay on the server as files the user owns.
 | Install | Add Finrod to the iPhone home screen from Safari. It opens full screen with its own icon. |
 | Text chat | Send a message and receive a streamed answer. |
 | Conversations | Start, reopen, and switch between separate conversations. History loads from the server on any tailnet device. |
-| Voice | Record a pt-BR voice message in the app and receive an answer based on its transcription. Audio and transcript both enter the raw log. |
 | Images and documents | Send photos, screenshots, PDFs, and files. The assistant can see images and read documents. Originals stay in the raw log. A PDF with pages the extraction cannot read produces a visible warning naming those pages. |
 | Web research | The assistant can search the web and cite its sources. |
 | Raw logs | Every profile keeps an append-only log with stable message identifiers. V3 memory cites these identifiers. |
@@ -88,13 +86,13 @@ Chats, files, and memory stay on the server as files the user owns.
 
 ## Model and privacy
 
-- Inference and transcription go through OpenRouter so the model can
+- Inference goes through OpenRouter so the model can
   change without porting anything.
 - Finrod uses only OpenRouter providers with zero data retention (ZDR).
   The ZDR restriction is set in the OpenRouter account settings, so
   OpenRouter enforces it for every request made with the account's key.
   Finrod only needs the API key.
-- The provider still receives the context and audio of each request.
+- The provider still receives the context of each request.
 - Finrod sends a request only the context that request needs.
 
 ## Conversation lifetime decision
@@ -153,16 +151,21 @@ Chats, files, and memory stay on the server as files the user owns.
 - Originals are stored next to the profile data and referenced by the
   entry that carries them. A conversion failure keeps the original.
 
-## Transcription decision
+## Voice decision
 
-- V1 transcribes voice through OpenRouter `/audio/transcriptions`. Audio
-  leaves home for each voice message; the provider does not retain it.
-- In the [STT eval](STT-EVAL.md) (2026-10-19), only `qwen/qwen3-asr-0.6b`
+- Decided 2026-10-26: v0.3.0 has no voice input. Finrod neither records
+  audio in the app nor supports keyboard dictation as a voice feature.
+- Reason: home-screen web apps on iOS ask for microphone permission again
+  on every launch ([WebKit 327237](https://bugs.webkit.org/show_bug.cgi?id=327237)),
+  can ask again after in-app navigation
+  ([WebKit 215884](https://bugs.webkit.org/show_bug.cgi?id=215884)), and
+  stop recording when the screen locks. The cost is too high for a
+  secondary feature.
+- Consequence: no audio enters the raw log for v0.3.0.
+- Notes kept for a later voice feature: in the [STT eval](STT-EVAL.md)
+  (2026-10-19), only `qwen/qwen3-asr-0.6b`
   routed under the ZDR filter. Its first call took 86s cold, then 1-3s.
   Accuracy was on par with local faster-whisper `small`.
-- If OpenRouter rejects a transcription request, for example because no
-  ZDR provider serves the model, the voice message fails with a visible
-  error and the audio stays in the raw log.
 - Local transcription on the mini PC (faster-whisper `small`, int8, CPU,
   about 2s per clip) is the tested alternative if provider transcription
   proves insufficient.
@@ -186,6 +189,7 @@ Chats, files, and memory stay on the server as files the user owns.
 
 ## Non-goals for V1
 
+- Voice input. See the voice decision.
 - Scheduled work, briefings, and background execution.
 - Push notifications. The user starts every conversation in V1.
 - Private mode with the local model. See [Roadmap](ROADMAP.md).
@@ -200,4 +204,4 @@ Chats, files, and memory stay on the server as files the user owns.
 - [Roadmap](ROADMAP.md): phase index.
 - [V2 sketch](V2-CONNECTORS.md): MCP connectors.
 - [V3 sketch](V3-MEMORY.md): portable memory.
-- [PRD.md](PRD.md): retired v0.2.0 browser requirements.
+- [Retired PRD](retired/PRD.md): v0.2.0 browser requirements.

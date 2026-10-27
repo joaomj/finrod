@@ -160,7 +160,7 @@ normal use. Keep credentials out of model context, logs, exports, and static
 application files.
 
 Local history and saved keys are not application-encrypted. Planned local
-encryption and complete conversation-log export belong in [Roadmap](ROADMAP.md).
+encryption and complete conversation-log export belong in [Roadmap](../ROADMAP.md).
 These plans do not change the current privacy guarantees. Device access, browser access,
 malicious application updates, and compromised hosting remain trust boundaries.
 Static hosting does not make the software distributor unable to access data
@@ -207,7 +207,7 @@ existing browser history during migration without replaying requests.
 
 - [Browser](BROWSER.md): current behavior and preview procedure.
 - [Architecture](ARCHITECTURE.md): implemented components and persistence.
-- [Roadmap](ROADMAP.md): planned protection and complete log export.
+- [Roadmap](../ROADMAP.md): planned protection and complete log export.
 - [Pi agent-core](https://github.com/earendil-works/pi/tree/main/packages/agent): agent engine and lifecycle contracts.
 - [Pi MCP](https://github.com/earendil-works/pi/tree/main/packages/mcp): native client and transports.
 - [Exa MCP](https://exa.ai/docs/get-started/exa-mcp): remote endpoint and authentication modes.

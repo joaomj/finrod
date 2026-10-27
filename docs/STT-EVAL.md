@@ -1,8 +1,9 @@
 # STT eval: local faster-whisper small vs OpenRouter transcription
 
-**Date:** 2026-10-19. **Current decision:** V1 transcribes through
-OpenRouter with the ZDR filter. See [PRD-v030](PRD-v030.md). Local
-transcription is the tested alternative.
+**Date:** 2026-10-19. **Current decision:** v0.3.0 has no voice
+input (decided 2026-10-26). See the
+voice decision in [PRD-v030](PRD-v030.md). These results stay for a later
+voice feature.
 
 ## Method
 

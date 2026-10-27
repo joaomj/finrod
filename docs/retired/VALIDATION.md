@@ -74,7 +74,7 @@ copy. These observations do not establish actual-phone keyboard or migration beh
 - Assess large-history performance before claiming capacity.
 
 See [Product requirements](PRD.md) for the complete acceptance gate and
-[Roadmap](ROADMAP.md) for planned protection. The preview's release alignment
+[Roadmap](../ROADMAP.md) for planned protection. The preview's release alignment
 is recorded below.
 
 ## Cloudflare release alignment

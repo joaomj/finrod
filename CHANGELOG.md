@@ -5,16 +5,34 @@ verification evidence and known limits.
 
 ## Unreleased
 
-### Changed
-
-- Finrod direction is now a personal assistant on the home server, used as a tailnet-only web app (v0.3.0 PRD). The v0.2.0 browser product is retired.
-- Project `AGENTS.md` removed. `docs/ROADMAP.md` is the phase index for v0.3.0, V2 connectors, and V3 memory.
-- Reference clones under `inspiration/` are ignored and never committed.
-
 ### Added
 
-- Automatic Cloudflare Pages deployment for published, checked stable releases.
-- Exact release-commit selection and verification of every hosted static asset.
+- Finrod runs on the home server as one Node service and opens as a web app on the phone, over the tailnet only.
+- Text chat with streamed answers, Markdown, and separate conversations that any tailnet device can reopen.
+- Restart safety: every message and answer part is saved before it appears; an answer cut off by a restart shows as interrupted.
+- Web research through Exa, with the sources listed under each answer. Optional sign-in to your own Exa account.
+- Images, PDFs, and text files in a message, up to 20 MB each. PDF pages without a text layer are named in the message.
+- Thumbs up or down on each answer.
+- Deleting a conversation, with its messages, votes, and stored files.
+- Temporary conversations that are never written to disk and end when Finrod restarts.
+- Home-screen install on the iPhone, with a manifest and icons.
+- Release archives with checksums, a systemd user service, and a daily update check that rolls back if the new release does not answer.
+
+### Changed
+
+- Finrod is now a personal assistant on the home server. The v0.2.0 browser product is retired.
+- The v0.2.0 documents moved to `docs/retired/`.
+
+### Removed
+
+- The browser-only app, its local history, export and restore, and the Cloudflare Pages deployment.
+
+### Known limits
+
+- No voice input.
+- One profile per server.
+- Chats and files are not encrypted on the server's disk.
+- The iPhone checks for v0.3.0 are done by hand; there are no automated tests yet.
 
 ## [0.2.0] - 2026-10-12
 
