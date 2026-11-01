@@ -128,8 +128,8 @@ async function exaCallback(response: ServerResponse, params: URLSearchParams) {
   try {
     await chat.exa.finish(params);
   } catch (error) {
-    // Request text can reach the error; line breaks in it could forge another log entry.
-    console.error("Exa sign-in failed:", String(error).replace(/\n|\r/g, " "));
+    // Request text can reach the error; line breaks in it could forge another log entry. CodeQL accepts only removal.
+    console.error("Exa sign-in failed:", String(error).replace(/\n/g, "").replace(/\r/g, ""));
     return page(response, 400, "Exa não conectado", error instanceof Error ? error.message : String(error));
   }
   response.writeHead(303, { location: "/", "cache-control": "no-store" }).end();
@@ -261,7 +261,7 @@ const server = createServer(async (request, response) => {
     if (error instanceof Refused) return json(response, 409, { error: error.message });
     // The path and the error can carry request text; line breaks in them could forge another log entry.
     const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
-    console.error(`${request.method} ${path} failed: ${detail}`.replace(/\n|\r/g, " "));
+    console.error(`${request.method} ${path} failed: ${detail}`.replace(/\n/g, "").replace(/\r/g, ""));
     if (!response.headersSent) json(response, 500, { error: "Internal error." });
     else response.end();
   }
