@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Finrod — interface no celular, decidida em 1 de novembro de 2026</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0b0c0e;
+    --screen: #111214;
+    --panel: #18191c;
+    --panel-2: #1e2024;
+    --line: #2a2c30;
+    --text: #e8e8ea;
+    --muted: #8b8d93;
+    --user: #24262a;
+    --accent: #e8e8ea;
+    --blue: #6ea8fe;
+    --red: #ff6b5e;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 40px 24px 80px; background: var(--page); color: var(--text); }
+
+  .head { max-width: 1180px; margin: 0 auto 26px; }
+  .head h1 { margin: 0 0 6px; font-size: 22px; font-weight: 650; letter-spacing: -.01em; }
+  .head p { margin: 0; max-width: 64ch; color: var(--muted); font-size: 14px; }
+  .keys { display: flex; flex-wrap: wrap; gap: 14px; margin: 18px 0 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--muted); }
+  .keys b { display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 6px; border-radius: 50%;
+    font-size: 10.5px; font-weight: 700; color: var(--page); vertical-align: -3px; }
+  .k-have { background: #8b8d93; }
+  .k-new { background: var(--blue); }
+
+  .decided { max-width: 1180px; margin: 0 auto 34px; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .decided div { border: 1px solid var(--line); border-left: 2px solid #3f6b4a; border-radius: 8px; padding: 8px 11px; font-size: 12.5px; color: #c9cacd; background: #14161a; }
+  .decided b { display: block; color: var(--text); font-weight: 600; margin-bottom: 1px; font-size: 12px; }
+  .decided s { color: var(--muted); }
+
+  .stage { display: flex; flex-wrap: wrap; gap: 34px; justify-content: center; max-width: 1180px; margin: 0 auto; }
+  figure { margin: 0; }
+  figcaption { margin-top: 10px; max-width: 320px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  figcaption b { display: block; color: var(--text); font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+
+  .phone { position: relative; width: 320px; height: 660px; padding: 10px; border-radius: 34px;
+    background: #1a1b1e; box-shadow: 0 18px 50px #0009, inset 0 0 0 1px #ffffff0d; }
+  .screen { position: relative; display: flex; flex-direction: column; height: 100%; overflow: hidden;
+    border-radius: 25px; background: var(--screen); }
+  .status { display: flex; justify-content: space-between; padding: 7px 16px 4px; color: var(--muted); font-size: 10.5px; letter-spacing: .02em; }
+
+  .num { position: absolute; z-index: 5; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+    font-size: 10.5px; font-weight: 700; color: var(--page); box-shadow: 0 0 0 2px var(--screen); }
+  .num.have { background: #8b8d93; }
+  .num.new { background: var(--blue); }
+
+  .bar { position: relative; display: flex; align-items: center; gap: 6px; padding: 2px 10px 8px; border-bottom: 1px solid var(--line); }
+  .bar.slim { padding: 0 10px 4px; }
+  .bar.slim h2 { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .bar h2 { flex: 1; margin: 0; font-size: 14px; font-weight: 600; text-align: center; }
+  .icon-btn { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--muted); }
+  .icon-btn.filled { background: var(--panel-2); color: var(--text); }
+  .bar .num { top: 0; right: 4px; }
+
+  .stream { position: relative; flex: 1; min-height: 0; overflow: hidden; padding: 10px 12px 4px; display: flex; flex-direction: column; justify-content: flex-end; gap: 12px;
+    -webkit-mask-image: linear-gradient(#0000 0, #000 16px, #000 calc(100% - 24px), #0000 100%);
+    mask-image: linear-gradient(#0000 0, #000 16px, #000 calc(100% - 24px), #0000 100%); }
+  .divider { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  .bubble { position: relative; align-self: flex-end; max-width: 88%; padding: 9px 12px; border-radius: 16px;
+    background: var(--user); font-size: 13.5px; line-height: 1.45; }
+  .bubble .num { top: -7px; left: -7px; }
+  .attach-chip { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 8px; border: 1px solid var(--line);
+    border-radius: 8px; background: #00000030; font-size: 11.5px; color: var(--muted); }
+
+  .answer { position: relative; display: flex; flex-direction: column; gap: 9px; padding: 11px 12px 9px;
+    border: 1px solid var(--line); border-radius: 14px; background: var(--panel); font-size: 13.5px; line-height: 1.5; }
+  .answer .num { top: -7px; left: -7px; }
+  .answer p { margin: 0; }
+  .caret { display: inline-block; width: 7px; height: 14px; margin-left: 2px; background: var(--muted);
+    vertical-align: -2px; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .folded { position: relative; display: flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 8px;
+    background: #ffffff06; color: var(--muted); font-size: 10.5px; }
+  .folded .num { top: -7px; left: -7px; }
+  .folded .spacer { flex: 1; }
+
+  .tools { display: flex; align-items: center; gap: 4px; margin-top: -2px; }
+  .tools .num { top: -12px; right: -8px; }
+  .thumb { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; color: var(--muted); }
+  .thumb.on { color: var(--text); background: var(--panel-2); }
+
+  .memory-line { position: relative; display: flex; align-items: center; gap: 6px; padding-left: 2px; color: var(--muted); font-size: 11.5px; }
+  .memory-line .num { top: -9px; left: -10px; }
+  .memory-line b { color: var(--text); font-weight: 500; }
+  .memory-line a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+  .hint-line { color: var(--muted); font-size: 11.5px; }
+
+  .foot { position: relative; flex: none; padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 7px; background: var(--screen); }
+  .foot.tight { padding: 4px 10px 6px; gap: 5px; }
+  .strip { position: relative; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 10px;
+    border: 1px solid #4a3b1a; background: #2a2113; color: #f0d9a8; font-size: 11.5px; }
+  .strip .num { top: -7px; left: -7px; }
+  .strip .spacer, .queue .spacer { flex: 1; }
+  .strip a, .queue a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+  .queue { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 11.5px; }
+  .queue .num { top: -7px; left: -7px; }
+
+  .chips { position: relative; display: flex; gap: 6px; }
+  .chips .num { top: -9px; right: -7px; left: auto; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 999px;
+    border: 1px solid #4a3b1a; background: #2a2113; color: #f0d9a8; font-size: 10.5px; white-space: nowrap; }
+  .chip.plain { border-color: var(--line); background: var(--panel); color: var(--muted); }
+
+  .composer { position: relative; display: flex; align-items: flex-end; gap: 6px; }
+  .composer .num { top: -10px; right: -8px; }
+  .field { position: relative; flex: 1; min-width: 0; display: block; min-height: 40px; padding: 9px 12px;
+    border: 1px solid var(--line); border-radius: 20px; background: var(--panel); color: var(--muted); font-size: 13.5px;
+    line-height: 1.4; }
+  .field .placeholder { color: var(--muted); }
+  .field .num { top: -9px; left: -7px; }
+  .field.typed { color: var(--text); }
+  .round { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; color: var(--muted); margin-bottom: 3px; }
+  .round.send { background: var(--accent); color: var(--page); }
+  .round.send.off { background: #2b2d32; color: #6b6e74; }
+  .round.mic { color: var(--text); }
+
+  .rec { position: relative; display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 12px;
+    border: 1px solid #4a2a26; border-radius: 20px; background: #24171a; }
+  .rec .num { top: -8px; left: -7px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); flex: none; }
+  .timer { font-variant-numeric: tabular-nums; font-size: 12.5px; color: #ffd9d5; }
+  .wave { display: flex; align-items: center; gap: 2px; flex: 1; height: 20px; }
+  .wave i { display: block; width: 2px; border-radius: 2px; background: #ff9d93; }
+  .rec .round { width: 30px; height: 30px; }
+
+  .keyboard { position: relative; flex: none; height: 238px; padding: 5px 3px 0; background: #191a1d;
+    border-top: 1px solid #24262a; display: flex; flex-direction: column; gap: 5px; }
+  .keyboard .num { top: 6px; left: 6px; }
+  .sugg { display: flex; justify-content: space-around; align-items: center; height: 26px; color: var(--muted);
+    font-size: 11.5px; border-bottom: 1px solid #26282c; margin: 0 4px 2px; }
+  .krow { display: flex; gap: 3px; justify-content: center; padding: 0 2px; }
+  .k { width: 27px; height: 33px; border-radius: 4.5px; background: #2b2d33; box-shadow: 0 1px 0 #0006; }
+  .k.gap { background: transparent; box-shadow: none; }
+  .k.mod { width: 40px; background: #23252a; }
+  .k.space { flex: 1; background: #2f3238; }
+  .k.ret { width: 58px; background: #3a3d44; }
+  .home-bar { height: 5px; width: 96px; margin: 2px auto 0; border-radius: 3px; background: #4a4d54; }
+
+  .bar.ghost { opacity: .22; border-bottom-style: dashed; }
+  .bar.ghost .num { opacity: .8; }
+  .annot { color: var(--muted); font-size: 10px; letter-spacing: .01em; text-align: center; opacity: .8; }
+  .count { position: absolute; right: 8px; bottom: 6px; display: inline-flex; align-items: center; gap: 4px;
+    color: var(--muted); font-size: 10.5px; background: var(--card, #17191c); padding: 2px 7px; border-radius: 7px; }
+  .count .num { position: static; margin: 0 0 0 2px; }
+  .sendmic { position: relative; }
+  .sendmic .ring { position: absolute; inset: -5px; border: 1.5px solid var(--accent); border-radius: 50%; opacity: .35; }
+
+  .pill { position: absolute; left: 50%; transform: translateX(-50%); top: -34px; z-index: 4; display: inline-flex;
+    align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; background: #2a2d33;
+    box-shadow: 0 6px 18px #0007; color: var(--text); font-size: 11px; }
+  .pill .num { top: -8px; right: -8px; }
+
+  .dim { flex: 1; background: var(--screen); filter: blur(.3px); opacity: .35; padding: 10px 12px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .sheet { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 14px;
+    border-top: 1px solid var(--line); border-radius: 18px 18px 0 0; background: var(--panel); box-shadow: 0 -20px 40px #0006; }
+  .sheet .grab { width: 36px; height: 4px; border-radius: 2px; background: #3a3d42; margin: 0 auto 2px; }
+  .sheet h3 { margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; color: var(--muted); text-transform: uppercase; }
+  .search-field { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--line);
+    border-radius: 20px; background: var(--panel-2); color: var(--muted); font-size: 13px; }
+  .result { display: flex; flex-direction: column; gap: 2px; padding: 9px 10px; border-radius: 10px; background: var(--panel-2); }
+  .result small { color: var(--muted); font-size: 10.5px; }
+  .result span { font-size: 12.5px; line-height: 1.35; }
+  .mem { display: flex; align-items: flex-start; gap: 8px; padding: 9px 10px; border-radius: 10px; background: var(--panel-2); font-size: 12.5px; }
+  .mem .spacer { flex: 1; }
+  .mem small { display: block; color: var(--muted); font-size: 10.5px; margin-top: 2px; }
+  .mini { display: flex; gap: 6px; }
+  .mini button { padding: 3px 9px; border: 1px solid var(--line); border-radius: 7px; background: none; color: var(--text); font: inherit; font-size: 11px; }
+  .mini button.ok { border-color: #2e5a3a; color: #a8e0b6; }
+
+  .legend { max-width: 1180px; margin: 56px auto 0; display: grid; gap: 26px 44px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .legend section { border-top: 1px solid var(--line); padding-top: 12px; }
+  .legend h3 { margin: 0 0 10px; font-size: 12.5px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .legend ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
+  .legend li { display: flex; gap: 9px; font-size: 13px; line-height: 1.45; }
+  .legend li b.n { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10.5px; color: var(--page); }
+  .legend li em { color: var(--muted); font-style: normal; display: block; font-size: 12px; margin-top: 1px; }
+  .legend li.dead > div { color: var(--muted); }
+  .legend li.dead div > :first-child { text-decoration: line-through; }
+
+  .notes { max-width: 1180px; margin: 48px auto 0; display: grid; gap: 28px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .notes section { border-top: 1px solid var(--line); padding-top: 12px; }
+  .notes h3 { margin: 0 0 8px; font-size: 12.5px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .notes ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.55; color: #c9cacd; }
+  .notes li { margin-bottom: 7px; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: #cfe3ff; }
+</style>
+</head>
+<body>
+
+<svg style="display:none">
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M6 12h.01M12 12h.01M18 12h.01"/></symbol>
+  <symbol id="i-attach" viewBox="0 0 24 24"><path d="M21 12.5 12 21a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10 19a2 2 0 0 1-3-3l8-8"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 3a3 3 0 0 1 3 3v5a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M7 10v11M7 10l4-8a3 3 0 0 1 3 3v4h5a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 17.6 21H7M7 10H4v11h3"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M17 14V3M17 14l-4 8a3 3 0 0 1-3-3v-4H5a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 6.4 3H17M17 14h3V3h-3"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+</svg>
+
+<div class="head">
+  <h1>Finrod — interface no celular <span style="color:var(--muted);font-weight:400;font-size:15px">decidida em 1 de novembro de 2026</span></h1>
+  <p>Desenho de referência, não código. Seis telas: conversa, gravação, busca, memória, teclado aberto e teclado aberto com resposta chegando. Cinza = já existe no app hoje, azul = decidido para a próxima versão. As decisões por extenso estão em <code>docs/UX-DIRECTION.md</code>, seção “Interface on the phone”.</p>
+  <ul class="keys">
+    <li><b class="k-have">1</b> já existe hoje no app</li>
+    <li><b class="k-new">1</b> decidido — muda na próxima versão</li>
+  </ul>
+</div>
+
+<div class="decided">
+  <div><b>10 · Pendências</b>Só na conversa em que nasceram. Nunca por cima da busca ou da memória.</div>
+  <div><b>11 · Incógnito</b><s>Descartado.</s> Fora do app.</div>
+  <div><b>5 · Pesquisa</b>Recolhida e mínima por padrão: uma linha.</div>
+  <div><b>8 · Microfone</b>Sempre visível no composer.</div>
+  <div><b>2 · Divisor</b>Uma vez por dia.</div>
+</div>
+
+<div class="stage">
+
+  <!-- ============ A: conversa em repouso ============ -->
+  <figure>
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>5G • 82%</span></div>
+        <div class="bar">
+          <span class="icon-btn"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-menu"/></svg></span>
+          <h2>Finrod</h2>
+          <span class="icon-btn"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg></span>
+          <b class="num have">1</b>
+        </div>
+
+        <div class="stream">
+          <div class="divider" style="position:relative">ontem<b class="num have" style="top:-9px;left:-4px">2</b></div>
+          <div class="bubble">Comprei tomate cereja demais. Dá pra congelar?</div>
+
+          <div class="divider" style="position:relative">hoje</div>
+          <div class="bubble">
+            Como congelo tomate cereja sem virar papa?
+            <div class="attach-chip">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-attach"/></svg>
+              foto.jpg · 1,2 MB
+            </div>
+            <b class="num have">3</b>
+          </div>
+
+          <div class="answer">
+            <p>Blanquear antes de congelar: corte raso em X na base, 30 s em água fervente, choque em água com gelo, e a pele sai sozinha. Congele inteiro e seco, num saco plano — assim ele mantém a forma.</p>
+            <div class="folded">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg>
+              3 páginas
+              <span class="spacer"></span>
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-chev"/></svg>
+              <b class="num new">5</b>
+            </div>
+            <div class="tools">
+              <span class="thumb on"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-up"/></svg></span>
+              <span class="thumb"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-down"/></svg></span>
+              <b class="num have">6</b>
+            </div>
+            <b class="num have">4</b>
+          </div>
+
+          <div class="memory-line">
+            <b class="num new">7</b>
+            Lembrou: <b>não come coentro</b> · <a href="#">desfazer</a>
+          </div>
+        </div>
+
+        <div class="foot">
+          <div class="composer">
+            <span class="icon-btn"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-attach"/></svg></span>
+            <div class="field"><span class="placeholder">Mensagem</span></div>
+            <span class="round mic"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-mic"/></svg></span>
+            <span class="round send off"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-send"/></svg></span>
+            <b class="num have">8</b>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>A · Conversa em repouso</b>Divisor por dia. A pesquisa encolheu para “3 páginas”. Sem incógnito: o composer é só anexo, texto, microfone e enviar.</figcaption>
+  </figure>
+
+  <!-- ============ B: gravando ============ -->
+  <figure>
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>5G • 82%</span></div>
+        <div class="bar">
+          <span class="icon-btn"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-menu"/></svg></span>
+          <h2>Finrod</h2>
+          <span class="icon-btn"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg></span>
+        </div>
+
+        <div class="stream">
+          <div class="divider">hoje</div>
+          <div class="bubble">Preciso marcar aquela consulta de pele sem falar no telefone.</div>
+          <div class="answer"><p>Consigo te lembrar amanhã às 9h de ligar, ou escrever a mensagem que você manda no app da clínica.</p></div>
+        </div>
+
+        <div class="foot">
+          <div class="strip">
+            <b class="num new">10</b>
+            2 memórias esperando revisão
+            <span class="spacer"></span>
+            <a href="#">ver</a>
+          </div>
+          <div class="queue">
+            <b class="num new">9</b>
+            1 mensagem na fila
+            <span class="spacer"></span>
+            <a href="#">retirar</a>
+          </div>
+          <div class="rec">
+            <b class="num new">15</b>
+            <span class="dot"></span>
+            <span class="timer">0:42</span>
+            <div class="wave">
+              <i style="height:6px"></i><i style="height:14px"></i><i style="height:9px"></i><i style="height:18px"></i><i style="height:11px"></i>
+              <i style="height:16px"></i><i style="height:7px"></i><i style="height:13px"></i><i style="height:19px"></i><i style="height:10px"></i>
+              <i style="height:15px"></i><i style="height:8px"></i><i style="height:12px"></i><i style="height:17px"></i><i style="height:6px"></i>
+            </div>
+            <span class="round"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-pause"/></svg></span>
+            <span class="round"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><use href="#i-x"/></svg></span>
+            <span class="round send"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-send"/></svg></span>
+          </div>
+          <div class="hint-line">Grava em pedaços: travar a tela não perde o que você já falou.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>B · Gravando</b>O composer vira barra de gravação. Acima dele, só o que precisa de você — e só nesta conversa.</figcaption>
+  </figure>
+
+  <!-- ============ C: busca ============ -->
+  <figure>
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>5G • 82%</span></div>
+        <div class="bar">
+          <span class="icon-btn"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-menu"/></svg></span>
+          <h2>Finrod</h2>
+          <span class="icon-btn filled"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg></span>
+        </div>
+        <div class="dim">
+          <div class="divider">hoje</div>
+          <div class="bubble">Como congelo tomate cereja sem virar papa?</div>
+          <div class="answer"><p>Blanquear antes de congelar: um corte raso em X na base…</p></div>
+        </div>
+        <div class="sheet">
+          <b class="num new" style="top:14px;right:12px">12</b>
+          <div class="grab"></div>
+          <div class="search-field">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg>
+            Buscar na conversa
+          </div>
+          <h3>Resultados</h3>
+          <div class="result"><span>…aquele risoto de tomate cereja do domingo</span><small>domingo · 19:42 · toque para ir até a mensagem</small></div>
+          <div class="result"><span>Como congelo tomate cereja sem virar papa?</span><small>hoje · 08:12</small></div>
+          <div class="hint-line">Busca por sentido, não só por palavra.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>C · Busca</b>Sobe por cima da conversa, sem trocar de tela. Nada de pendências aqui: decisão 10.</figcaption>
+  </figure>
+
+  <!-- ============ D: memória ============ -->
+  <figure>
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>5G • 82%</span></div>
+        <div class="bar">
+          <span class="icon-btn"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-menu"/></svg></span>
+          <h2>Finrod</h2>
+          <span class="icon-btn"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg></span>
+        </div>
+        <div class="dim">
+          <div class="divider">hoje</div>
+          <div class="bubble">Preciso marcar aquela consulta de pele sem falar no telefone.</div>
+        </div>
+        <div class="sheet">
+          <b class="num new" style="top:14px;right:12px">13</b>
+          <div class="grab"></div>
+          <h3>Esperando você</h3>
+          <div class="mem">
+            <div><span>não come coentro</span><small>de hoje · 08:14 · sugerida pela resposta</small></div>
+            <span class="spacer"></span>
+            <div class="mini"><button class="ok">aprovar</button><button>descartar</button></div>
+          </div>
+          <div class="mem">
+            <div><span>prefere manhã para consultas</span><small>de hoje · 09:03</small></div>
+            <span class="spacer"></span>
+            <div class="mini"><button class="ok">aprovar</button><button>descartar</button></div>
+          </div>
+          <h3>O que o Finrod sabe</h3>
+          <div class="mem"><div><span>vegetariano</span><small>desde 12 de outubro</small></div><span class="spacer"></span><div class="mini"><button>editar</button><button>apagar</button></div></div>
+          <div class="mem"><div><span>guarda as conversas no servidor de casa</span><small>desde 3 de setembro</small></div><span class="spacer"></span><div class="mini"><button>editar</button><button>apagar</button></div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>D · Memória</b>Pendências primeiro, depois o guardado. Apagar aqui não apaga a mensagem que originou.</figcaption>
+  </figure>
+
+  <!-- ============ E: teclado aberto ============ -->
+  <figure>
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>5G • 82%</span></div>
+        <div class="bar slim ghost">
+          <span class="icon-btn"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-menu"/></svg></span>
+          <h2>tomate cereja</h2>
+          <span class="icon-btn"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg></span>
+          <b class="num new">23</b>
+        </div>
+
+        <div class="stream">
+          <div class="answer" style="opacity:.55">
+            <p>Congele inteiro e seco, num saco plano — assim ele mantém a forma.</p>
+          </div>
+          <div class="memory-line" style="opacity:.55">
+            Lembrou: <b>não come coentro</b>
+          </div>
+          <div class="bubble">e o manjericão aguenta congelar junto?</div>
+          <b class="num new" style="top:auto;bottom:34px;left:6px">18</b>
+        </div>
+
+        <div class="foot tight">
+          <div class="chips">
+            <b class="num new">21</b>
+            <span class="chip">2 memórias</span>
+            <span class="chip plain">1 na fila</span>
+          </div>
+          <div class="composer">
+            <span class="icon-btn"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-attach"/></svg></span>
+            <div class="field typed">
+              e o manjericão aguenta congelar junto?<span class="caret"></span>
+              <b class="num new">19</b>
+            </div>
+            <span class="round send sendmic">
+              <span class="ring"></span>
+              <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-send"/></svg>
+              <b class="num new">17</b>
+            </span>
+          </div>
+          <div class="annot">toque envia · segure para falar</div>
+        </div>
+
+        <div class="keyboard">
+          <b class="num new">16</b>
+          <div class="sugg"><span>junto</span><span>amargo</span><span>congelar</span></div>
+          <div class="krow"><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i></div>
+          <div class="krow"><i class="k gap" style="width:14px"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k gap" style="width:14px"></i></div>
+          <div class="krow"><i class="k mod"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k mod"></i></div>
+          <div class="krow"><i class="k mod" style="width:44px"></i><i class="k mod"></i><i class="k space"></i><i class="k ret"></i></div>
+          <div class="home-bar"></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>E · Teclado aberto</b>A tela encolhe: o teclado ocupa ~40% e o stream perde altura, mas a última mensagem continua encostada no composer. Nada de rolar a página inteira.</figcaption>
+  </figure>
+
+  <!-- ============ F: teclado aberto + resposta chegando ============ -->
+  <figure>
+    <div class="phone">
+      <div class="screen">
+        <div class="status"><span>9:41</span><span>5G • 82%</span></div>
+        <div class="bar slim ghost">
+          <span class="icon-btn"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-menu"/></svg></span>
+          <h2>tomate cereja</h2>
+          <span class="icon-btn"><svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-search"/></svg></span>
+        </div>
+
+        <div class="stream">
+          <div class="bubble">e o manjericão aguenta congelar junto?</div>
+          <div class="answer">
+            <p>Manjericão não gosta de gelo: escurece e perde o aroma. Melhor congelar em<span class="caret"></span></p>
+            <b class="num new">22</b>
+          </div>
+          <div class="count">
+            2 novas
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-arrow-down"/></svg>
+            <b class="num new">20</b>
+          </div>
+        </div>
+
+        <div class="foot tight">
+          <div class="chips">
+            <span class="chip">2 memórias</span>
+            <span class="chip plain">1 na fila</span>
+          </div>
+          <div class="composer">
+            <span class="icon-btn"><svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-attach"/></svg></span>
+            <div class="field typed">
+              então congelo o molho pronto<span class="caret"></span>
+            </div>
+            <span class="round send sendmic">
+              <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><use href="#i-send"/></svg>
+            </span>
+          </div>
+          <div class="annot">toque envia · segure para falar</div>
+        </div>
+
+        <div class="keyboard">
+          <div class="sugg"><span>molho</span><span>pronto</span><span>então</span></div>
+          <div class="krow"><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i></div>
+          <div class="krow"><i class="k gap" style="width:14px"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k gap" style="width:14px"></i></div>
+          <div class="krow"><i class="k mod"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k"></i><i class="k mod"></i></div>
+          <div class="krow"><i class="k mod" style="width:44px"></i><i class="k mod"></i><i class="k space"></i><i class="k ret"></i></div>
+          <div class="home-bar"></div>
+        </div>
+      </div>
+    </div>
+    <figcaption><b>F · Teclado aberto, resposta chegando</b>A resposta entra na conversa, não por cima do que você digita. Se você rolou para cima, aparece a pílula “2 novas”.</figcaption>
+  </figure>
+
+</div>
+
+<div class="legend">
+  <section>
+    <h3>Barra e fluxo</h3>
+    <ol>
+      <li><b class="n k-have">1</b><div>Título, busca e menu<div><em>A busca sobe para a barra: com uma conversa só, buscar é o único “ir para” que importa.</em></div></div></li>
+      <li><b class="n k-have">2</b><div>Divisor por dia<div><em>Decidido: um fio por dia (“ontem”, “hoje”), não a cada pausa longa.</em></div></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h3>Resposta e pesquisa</h3>
+    <ol>
+      <li><b class="n k-have">3</b><div>Bolha do usuário, com anexo</div></li>
+      <li><b class="n k-have">4</b><div>Resposta como cartão</div></li>
+      <li><b class="n k-new">5</b><div>Pesquisa recolhida<div><em>Decidido: mínima por padrão. Uma linha de 10,5 px com “3 páginas” e uma seta. Só abre se você tocar.</em></div></div></li>
+      <li><b class="n k-have">6</b><div>Polegares, dentro do cartão</div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h3>Memória</h3>
+    <ol>
+      <li><b class="n k-new">7</b><div>Linha de memória sob a resposta que a gerou</div></li>
+      <li><b class="n k-new">10</b><div>Faixa de pendências — só na conversa<div><em>Decidido: vive no composer desta conversa. Não aparece na busca nem na folha de memória.</em></div></div></li>
+      <li><b class="n k-new">13</b><div>Folha de memória<div><em>Aprovar/descartar e depois editar/apagar o que já está guardado.</em></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h3>Composer</h3>
+    <ol>
+      <li><b class="n k-have">8</b><div>Anexar · texto · microfone · enviar<div><em>Decidido: microfone sempre visível, mesmo com texto digitado. Sem incógnito.</em></div></div></li>
+      <li><b class="n k-new">9</b><div>Fila com retirar</div></li>
+      <li><b class="n new">15</b><div>Barra de gravação</div></li>
+      <li class="dead"><b class="n k-have">11</b><div><div>Incógnito</div><em>Descartado hoje. O botão de máscara saiu do campo.</em></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h3>Teclado</h3>
+    <ol>
+      <li><b class="n k-new">16</b><div>O teclado encolhe a tela, não a página<div><em>~40% da altura. O stream perde espaço; a barra e o composer continuam no lugar. No iOS isso exige <code>visualViewport</code>: altura e <code>offsetTop</code> viram a altura do shell.</em></div></div></li>
+      <li><b class="n k-new">17</b><div>Um botão só<div><em>Decidido: toque envia, segurar grava. Ganha uns 40 px para o campo e deixa o composer com três controles. O gesto é invisível, então o desenho mostra a dica “toque envia · segure para falar” e um anel quando o dedo pressiona.</em></div></li>
+      <li><b class="n k-new">18</b><div>Posição da conversa<div><em>Decidido: se você rolou para cima para reler algo, o trecho fica onde está quando o teclado abre; se você estava no fim, a conversa encosta no campo. O iOS rola a página sozinho ao focar o campo, então o app compensa com <code>visualViewport</code>.</em></div></li>
+      <li><b class="n k-new">19</b><div>O campo cresce até seis linhas<div><em>Decidido: seis, depois rola por dentro. Hoje o limite é <code>40vh</code>, que com o teclado aberto come a conversa.</em></div></li>
+      <li><b class="n k-new">20</b><div>Contador discreto<div><em>Decidido: um “2 novas ↓” pequeno e cinza no fim da conversa, sem pílula flutuante. Só aparece quando você rolou para cima e chegou resposta.</em></div></li>
+      <li><b class="n k-new">21</b><div>Pendências e fila viram chips<div><em>Com o teclado aberto, a faixa inteira e a fila não cabem: viram dois chips de uma linha. Toque abre a folha.</em></div></div></li>
+      <li><b class="n k-new">22</b><div>Resposta chegando com o teclado aberto<div><em>Entra no stream com cursor. Não empurra o campo, não rouba o foco, não fecha o teclado.</em></div></li>
+      <li><b class="n k-new">23</b><div>Barra escondida<div><em>Decidido: com o teclado aberto a barra some — no desenho ela aparece esmaecida e tracejada só para mostrar o que saiu.</em></div></li>
+    </ol>
+  </section>
+
+  <section>
+    <h3>Fora de propósito</h3>
+    <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.55;color:#c9cacd">
+      <li>Trilho lateral, barra de status, barras empilhadas, quadro de subagentes, papéis.</li>
+      <li>Lista de conversas com pastas e etiquetas.</li>
+      <li>Painéis de arquivos, navegador, diffs e artefatos.</li>
+      <li>Incógnito.</li>
+    </ul>
+  </section>
+</div>
+
+<div class="notes">
+  <section>
+    <h3>Como o teclado se comporta, na prática</h3>
+    <ul>
+      <li><b>iOS (Safari, Brave, app na tela de início — todos WebKit):</b> o teclado não encolhe o layout, só o <code>visualViewport</code>. O app precisa ler <code>visualViewport.height</code> e <code>offsetTop</code> e aplicar no shell; <code>100dvh</code> sozinho não resolve.</li>
+      <li><b>Android (Chrome):</b> o <code>interactive-widget=resizes-content</code> que você já tem faz o teclado encolher o layout. É o caso fácil.</li>
+      <li><b>Sem autofocus:</b> o app abre com a altura inteira; o teclado só aparece num toque. Isso já estava decidido para o toque.</li>
+      <li><b>16 px no campo:</b> abaixo disso o iOS dá zoom ao focar. Hoje o app herda 16 px; precisa continuar assim.</li>
+      <li><b>Nunca rolar a página:</b> o <code>body</code> fica fixo e só o stream rola. Caso contrário o iOS empurra o cabeçalho para fora quando você toca no campo do fim.</li>
+      <li><b>Arrastar para fechar o teclado:</b> os eventos do <code>visualViewport</code> chegam durante o gesto; a altura do shell precisa acompanhar sem pular.</li>
+    </ul>
+  </section>
+  <section>
+    <h3>Ainda não desenhado</h3>
+    <ul>
+      <li>Primeira abertura, sem mensagens.</li>
+      <li>Erro de envio e resposta interrompida por reinício do servidor.</li>
+      <li>Teclado aberto durante a gravação de voz (não deveria acontecer: gravar fecha o teclado).</li>
+      <li>Fontes com a pesquisa aberta.</li>
+      <li>iPad / tela larga com teclado.</li>
+    </ul>
+  </section>
+</div>
+
+</body>
+</html>

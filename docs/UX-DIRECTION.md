@@ -1,8 +1,8 @@
 # UX direction after v0.3.0
 
-**Status:** direction, decided 2026-10-27. These
-decisions are not requirements yet. Each release that implements them gets
-its own PRD.
+**Status:** direction, decided 2026-10-27; phone interface decided
+2026-11-01. These decisions are not requirements yet. Each release that
+implements them gets its own PRD.
 
 ## Result
 
@@ -33,6 +33,130 @@ voice, because speaking is easier than typing for personal topics.
   home-screen app
   ([WebKit 327237](https://bugs.webkit.org/show_bug.cgi?id=327237)).
   This is one tap per session.
+
+## Interface on the phone
+
+Decided 2026-11-01. The reference is
+[pi-pocket](https://github.com/TannerMidd/pi-pocket): 738 stars, MIT,
+mobile-first web app on Pi Durable 1.4.0, the same durability layer, and the
+same pinned `pi-ai`, `chord` and `pi-mcp` versions as Finrod. Finrod takes its
+craft and leaves its coding-agent surface behind.
+
+The drawing of the six screens is
+[`docs/ui/interface-2026-11-01.html`](ui/interface-2026-11-01.html), one
+self-contained file with no dependencies.
+
+### Layout
+
+- One screen: header, conversation, composer. Search and memory open as
+  sheets over the conversation; neither replaces it.
+- The header holds the title, a search button and the menu. It does not
+  carry status, progress or queue information.
+- One divider per day, labelled “ontem” and “hoje”. No other visible
+  divisions, and no split at every long pause.
+- A user message is a rounded accent bubble. An attachment is a chip inside
+  the bubble, not a separate block.
+- An answer is a bordered card. The thumbs sit inside the card and stay
+  marked after a vote.
+
+### Research and sources
+
+- Searches and fetched pages collapse into one small line under the answer,
+  for example “3 páginas”. The line opens on tap.
+- The line is collapsed by default. A source list never takes space unless
+  the user asks for it.
+- This replaces the current v0.3.0 behaviour, where the sources list stays
+  visible under every researched answer.
+
+### Memory
+
+- A line under the answer that created it: “Lembrou: … · desfazer”.
+- Pending memories appear as a strip in the composer of that conversation
+  only. They never appear over the search sheet or the memory sheet.
+- The memory sheet lists pending memories first, with approve and discard,
+  then the stored memories, with edit and delete.
+- Consequence of the decision below: forgetting and the pending review are
+  the only controls over what Finrod keeps.
+
+### Composer
+
+- Three controls: attach, text field, and one round button.
+- The round button sends on a tap and records on a long press. It always
+  shows the send arrow; holding it turns the composer into the recording bar.
+  The gesture is invisible, so the first screens show “toque envia · segure
+  para falar” and the button draws a ring while pressed.
+- The single button returns about 40 px to the field, which is what makes six
+  lines usable on a 320 px wide phone.
+- The field grows to a maximum of six lines, then scrolls inside itself.
+- With the field empty, a tap sends nothing. The long press still records.
+- A message sent while an answer runs waits in a queue shown above the
+  composer, with a control to withdraw it.
+- While recording, the composer becomes a recording bar: red dot, timer,
+  waveform, pause, cancel and send. Audio uploads in pieces during the
+  recording, so a locked screen loses only the audio after that moment.
+- Answers remain text. Finrod does not speak a reply.
+
+### Streaming
+
+- Answer text appears inside the answer card, with a small cursor. There is no
+  separate working screen and no typing indicator.
+
+### Incognito: rejected
+
+Decided 2026-11-01. There is no incognito mode and no tinted composer. This
+replaces the incognito proposal of 2026-10-27, and with it the replacement for
+v0.3.0 temporary conversations. Finrod currently writes every message before
+it answers, so a sensitive exchange is recorded and can only be forgotten
+afterwards.
+
+### Keyboard
+
+The keyboard resizes the application shell, not the page.
+
+- On iOS, the keyboard changes `visualViewport.height` and `offsetTop` only.
+  The shell follows both. `100dvh` alone does not react to the keyboard.
+  Safari, Brave and the home-screen app all use WebKit on iOS, so one
+  implementation covers them.
+- On Android, Chrome resizes the layout viewport. The
+  `interactive-widget=resizes-content` meta tag in `app/index.html` already
+  covers this case.
+- The page body does not scroll. Only the conversation scrolls. Otherwise iOS
+  moves the header off screen when the field at the bottom takes focus.
+- The bottom safe-area padding drops while the keyboard is open, so no dead
+  gap remains above the keyboard.
+- The app does not focus the field when it opens. The keyboard appears only
+  when the user taps the field.
+- The field text stays at 16 px. A smaller font makes iOS zoom on focus.
+- With the keyboard open, the header disappears and the conversation takes
+  the space. The conversation title is not needed while writing.
+- Pending memories and the queue become one-line chips while the keyboard is
+  open.
+- When the keyboard opens, Finrod keeps the messages the user was reading in
+  place if the user had scrolled up. If the user was at the end of the
+  conversation, the newest message moves down to sit against the composer.
+  iOS scrolls the page itself when the field takes focus, so the shell
+  compensates through `visualViewport.height` and `offsetTop`.
+- An answer that arrives while the keyboard is open enters the conversation.
+  It does not take focus, close the keyboard or move the field.
+- If the user has scrolled up, a small grey “N novas ↓” counter sits at the
+  end of the conversation and opens the newest message. There is no floating
+  pill.
+
+### Not adopted from the reference
+
+The left rail, the status line, the bars above the composer, the subagent
+board, roles and take-turns, the session list with folders and tags, and the
+file, browser, diff and artifact panels. These serve someone who supervises
+coding agents. Finrod's conversation fills the phone screen.
+
+### Open
+
+Two loose ends from the single button:
+
+- Whether the “segure para falar” hint stays on screen or appears only in the
+  first sessions.
+- Whether a tap with an empty field does nothing, or starts the recording
+  bar.
 
 ## Voice
 
@@ -93,18 +217,18 @@ Folders per conversation become messy and add sorting work.
 
 - The app opens at the bottom of the stream, with the last messages visible
   and the input ready. There is no home screen or greeting.
-- A quiet time divider appears after a long pause. There are no other visible
-  divisions.
-- There is no daily split. Context is assembled when Finrod reads: each answer
-  sees the recent messages plus memories retrieved from older ones. This
-  handles interleaved topics.
+- One divider per day, labelled “ontem” and “hoje”, decided 2026-11-01. There
+  are no other visible divisions, and no split at every long pause. Context is
+  assembled when Finrod reads: each answer sees the recent messages plus
+  memories retrieved from older ones. This handles interleaved topics.
 - To return to an old topic, the user long-presses a message and selects
   **Reply**. Finrod includes that exchange in the context.
 - Search sits at the top of the stream. Results jump to the message.
 - Forget replaces conversation deletion. The user long-presses a message and
   forgets the message or the exchange. Memories derived from it go too.
-- Incognito replaces temporary conversations. A toggle tints the input.
-  Incognito messages are never saved and never become memories.
+- Temporary conversations are dropped, not replaced. Incognito was rejected
+  on 2026-11-01 (see “Incognito: rejected” above). Finrod writes every message
+  before it answers, so forgetting after the fact is the only control.
 - Later proactive output, such as reminders, arrives as a normal message in
   the stream.
 
