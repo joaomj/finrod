@@ -16,27 +16,23 @@ import {
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import type { Config } from "./config.js";
+import { clock } from "./clock.js";
 import { ExaAuth } from "./exa-auth.js";
 import { describeStoredFile, readStoredFile, storeFile, type Attachment } from "./files.js";
 import { Memories, REMEMBER_TOOL, remembering, type Memory } from "./memories.js";
 import { research } from "./research.js";
 import { Voice } from "./voice.js";
+import finrodPrompt from "./prompts/finrod.md";
+import memoriesPrompt from "./prompts/memories.md";
 
-const INSTRUCTIONS = [
-  "You are Finrod, a personal assistant. Answer in the language the user writes in. Be direct and concise.",
-  "Use web_search whenever the answer depends on current or external facts you cannot know for certain.",
-  "Do not answer such questions from memory and do not send the user to look it up.",
-  "Cite the sources you used as Markdown links next to the facts they support.",
-  "When the user states a lasting fact about themselves or a lasting preference, call remember once for it, with a short sentence in the user's language.",
-  "Do not remember passing details, questions, or anything that matters only to this exchange. Never mention that you remembered something; the app tells the user.",
-].join(" ");
+const INSTRUCTIONS = finrodPrompt.trim();
 const MAX_SNIPPET = 160;
 const MAX_HITS = 20;
 
 /** The model's instructions: Finrod's rules plus what the user approved Finrod to know. */
 function instructionsFor(saved: readonly Memory[]): string {
   if (saved.length === 0) return INSTRUCTIONS;
-  return `${INSTRUCTIONS}\n\nWhat you know about the user, approved by them:\n${saved.map((memory) => `- ${memory.text}`).join("\n")}`;
+  return `${INSTRUCTIONS}\n\n${memoriesPrompt}${saved.map((memory) => `- ${memory.text}`).join("\n")}`;
 }
 
 /** Finrod's own index of conversations, newest first. The app opens the newest one as the user's stream. */
@@ -324,6 +320,7 @@ export class Chat {
     const registry = createRegistry();
     registry.install(research(exa));
     registry.install(remembering(memories));
+    registry.install(clock());
     const threads = await Threads.open({
       models,
       registry,
@@ -428,7 +425,9 @@ export function messagesOf(view: ConversationView, memories: Memories): ChatMess
       remembered = [];
       messages.push({ id: entry.id, role: "user", at: message.timestamp, text: userText(message) });
     } else if (entry.kind === "pi.assistant" && message?.role === "assistant") {
-      const text = assistantText(message);
+      // Text written just before a lookup ("Let me check.") is not an answer; the answer follows the tool's result.
+      const searching = message.content.some((part) => part.type === "toolCall" && part.name !== REMEMBER_TOOL);
+      const text = searching ? "" : assistantText(message);
       const error =
         message.stopReason === "error"
           ? (message.errorMessage ?? "The model returned an error.")

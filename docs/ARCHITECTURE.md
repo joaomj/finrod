@@ -19,6 +19,8 @@ app, the HTTP layer, file handling, feedback, memory, voice, and deletion.
 | Voice | Chunked audio upload, transcription while recording, audio deletion | `server/voice.ts`, `scripts/transcribe.py` |
 | Files | Type detection, stored originals, PDF and text extraction | `server/files.ts` |
 | Research | `web_search` and `web_fetch` tools through Exa MCP | `server/research.ts` |
+| Prompt | The model's instructions, kept as Markdown and bundled as text by the build | `server/prompts/` |
+| Clock | `clock` tool: the current date and time in the server's time zone | `server/clock.ts` |
 | Exa account | OAuth sign-in to the user's Exa account, token file | `server/exa-auth.ts` |
 | Web app | Stream, sheets (search, memory), queue, composer, recording, keyboard | `app/main.ts`, `app/index.html`, `app/style.css` |
 | Build | Bundle app and server into `dist/`, version the app's script and style | `scripts/build.mjs` |
