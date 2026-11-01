@@ -7,9 +7,10 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "check": "tsc --noEmit -p server && tsc --noEmit -p app",
+    "check": "tsc --noEmit -p server && tsc --noEmit -p app && tsc --noEmit -p test",
     "build": "npm run check && node scripts/build.mjs",
-    "start": "node dist/server/main.js"
+    "start": "node dist/server/main.js",
+    "test": "npm run build && node --test test/*.test.ts"
   },
   "dependencies": {
     "@earendil-works/chord": "1.4.0",
