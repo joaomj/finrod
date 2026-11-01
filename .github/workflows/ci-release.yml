@@ -98,6 +98,8 @@ jobs:
         id: analysis
         with:
           output: codeql-results
+          # The repository's CodeQL default setup uploads results; GitHub rejects a second, advanced upload.
+          upload: never
           upload-database: false
       - name: Enforce security findings threshold
         env:
