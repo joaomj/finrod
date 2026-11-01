@@ -47,6 +47,28 @@ Harness rules from the test: force the tool call
 (`tool_choice: required`) on the 1.2B; give the 2.6B 512 or more
 max tokens, or it returns silence.
 
+## Rules in code, not in the prompt
+
+Models do not follow prompt rules reliably. Each rule in
+`server/prompts/finrod.md` should move to code when code can enforce
+it. pi-durable has the hooks for this (`beforeRequest`, `onYield`,
+`beforeTool`, `afterTool` in `harness/types.d.ts`).
+
+| Prompt rule | Enforcement in code | State |
+| --- | --- | --- |
+| Do not announce a lookup ("let me check") | The server hides text written just before a tool call | Done |
+| Know the date and time | The `clock` tool (`server/clock.ts`) | Done |
+| Cite sources as links | The server attaches sources from the search results; delete the rule | Next |
+| Remember lasting facts, one per memory, without mentioning it | A separate cheap model call after each user message returns a JSON list of facts. The chat model loses the `remember` tool. | Next |
+| Avoid wide tables on a phone | The app scrolls tables sideways, or the server turns them into lists | Next |
+| Search for current facts instead of answering from memory | `onYield`: if the answer used no tool and a cheap classifier says it needs fresh data, nudge the model to search | Only if seen in real use; one extra call per answer |
+| No filler and no closing offers | `onYield`: a cheap classifier flags them and a nudge asks for a rewrite | Only if seen in real use; one extra call when triggered |
+| Read words in their everyday sense ("tempo" means weather) | None found; stays in the prompt | Prompt only |
+
+Observed 2026-11-01 with `deepseek/deepseek-v4.1-flash-1017`: the model
+replied "Anotado" after a memory and saved two facts as one memory,
+against the prompt.
+
 ## Retired: v0.2.0 browser product
 
 - The browser-only chat is retired in favor of the server product. Its
