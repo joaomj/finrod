@@ -3,7 +3,7 @@
 This file records user-facing changes. See the versioned release notes for
 verification evidence and known limits.
 
-## Unreleased
+## [0.3.0] - 2026-11-01
 
 ### Added
 
@@ -71,5 +71,6 @@ verification evidence and known limits.
 - Initial release. The original GitHub release records its historical scope and evidence.
   It does not describe the current browser architecture.
 
+[0.3.0]: https://github.com/joaomj/finrod/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/joaomj/finrod/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/joaomj/finrod/releases/tag/v0.1.0
