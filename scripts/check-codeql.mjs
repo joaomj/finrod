@@ -13,9 +13,16 @@ for (const file of files) {
     if (!Array.isArray(run.results) || !Array.isArray(run.tool?.driver?.rules)) {
       throw new Error(`${file}: missing CodeQL results or rule metadata.`);
     }
-    const rules = run.tool.driver.rules;
+    // A result names its rule in the driver, or in a query pack under tool.extensions (result.rule.toolComponent).
+    const components = [run.tool.driver, ...(run.tool.extensions ?? [])];
     for (const result of run.results) {
-      const rule = rules.find(rule => rule.id === result.ruleId) ?? rules[result.ruleIndex];
+      const component = components[result.rule?.toolComponent?.index ?? -1];
+      const index = result.rule?.index ?? result.ruleIndex;
+      const id = result.rule?.id ?? result.ruleId;
+      const rule =
+        (component && component.rules?.[index]) ??
+        run.tool.driver.rules[index] ??
+        components.flatMap(c => c.rules ?? []).find(rule => rule.id === id);
       if (!rule) throw new Error(`${file}: result has no matching rule.`);
       const value = rule.properties?.["security-severity"];
       const severity = value === undefined ? undefined : Number(value);
