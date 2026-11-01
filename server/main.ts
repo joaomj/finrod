@@ -124,14 +124,12 @@ function page(response: ServerResponse, status: number, title: string, text: str
     );
 }
 
-/** Request text in a log line, without line breaks that could forge another entry. */
-const oneLine = (text: string) => text.replace(/[\r\n]+/g, " ");
-
 async function exaCallback(response: ServerResponse, params: URLSearchParams) {
   try {
     await chat.exa.finish(params);
   } catch (error) {
-    console.error("Exa sign-in failed:", oneLine(String(error)));
+    // Request text can reach the error; line breaks in it could forge another log entry. CodeQL accepts only removal.
+    console.error("Exa sign-in failed:", String(error).replace(/\n/g, "").replace(/\r/g, ""));
     return page(response, 400, "Exa não conectado", error instanceof Error ? error.message : String(error));
   }
   response.writeHead(303, { location: "/", "cache-control": "no-store" }).end();
@@ -261,7 +259,9 @@ const server = createServer(async (request, response) => {
   } catch (error) {
     if (error instanceof HttpError || error instanceof VoiceError) return json(response, error.status, { error: error.message });
     if (error instanceof Refused) return json(response, 409, { error: error.message });
-    console.error(`${request.method} ${oneLine(path)} failed:`, error);
+    // The path and the error can carry request text; line breaks in them could forge another log entry.
+    const detail = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    console.error(`${request.method} ${path} failed: ${detail}`.replace(/\n/g, "").replace(/\r/g, ""));
     if (!response.headersSent) json(response, 500, { error: "Internal error." });
     else response.end();
   }
