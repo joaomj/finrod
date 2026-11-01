@@ -4,23 +4,25 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { after, before, test } from "node:test";
+import { after, test } from "node:test";
 
 type Message = { id: number; role: "user" | "assistant"; text: string; error?: string };
 type Live = { busy: boolean; partial?: string };
 type State = { messages: Message[]; live: Live };
 
-let dataDir: string;
+const dataDirs: string[] = [];
 const servers: ChildProcess[] = [];
-
-before(async () => {
-  dataDir = await mkdtemp(join(tmpdir(), "finrod-test-"));
-});
 
 after(async () => {
   for (const server of servers) server.kill("SIGKILL");
-  await rm(dataDir, { recursive: true, force: true });
+  await Promise.all(dataDirs.map((dir) => rm(dir, { recursive: true, force: true })));
 });
+
+async function newDataDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "finrod-test-"));
+  dataDirs.push(dir);
+  return dir;
+}
 
 async function freePort(): Promise<number> {
   const probe = createServer();
@@ -31,7 +33,7 @@ async function freePort(): Promise<number> {
 }
 
 /** Start the built server on `dataDir` with the OpenRouter stub preloaded. */
-async function startServer(options: { hang: boolean }) {
+async function startServer(dataDir: string, options: { hang: boolean }) {
   const port = await freePort();
   const child = spawn(process.execPath, ["--import", "./test/stub-openrouter.mjs", "dist/server/main.js"], {
     env: {
@@ -89,9 +91,9 @@ async function follow(base: string, id: number, done: (state: State) => boolean)
 const answered = (state: State) => !state.live.busy && state.messages.some((m) => m.role === "assistant" && !m.error);
 
 test("a message streams its answer and the conversation reopens with the same history", async () => {
-  const { base, kill } = await startServer({ hang: false });
+  const { base, kill } = await startServer(await newDataDir(), { hang: false });
   try {
-    const id = (await post(base, "/api/conversations")).id as number;
+    const id = ((await (await fetch(`${base}/api/stream`)).json()) as { id: number }).id;
     const watching = follow(base, id, answered);
     await post(base, `/api/conversations/${id}/messages`, { text: "hello", requestId: "request-0001" });
     const states = await watching;
@@ -108,21 +110,21 @@ test("a message streams its answer and the conversation reopens with the same hi
 
     const reopened = await follow(base, id, (state) => state.messages.length > 0);
     assert.deepEqual(reopened.at(-1)!.messages, final.messages);
-    const list = (await (await fetch(`${base}/api/conversations`)).json()) as { id: number; title: string }[];
-    assert.deepEqual(list.map(({ id, title }) => ({ id, title })), [{ id, title: "hello" }]);
+    assert.equal(((await (await fetch(`${base}/api/stream`)).json()) as { id: number }).id, id, "the stream stays the same conversation");
   } finally {
     await kill();
   }
 });
 
 test("a server killed mid-answer restarts without losing or duplicating the conversation", async () => {
-  const first = await startServer({ hang: true });
-  const id = (await post(first.base, "/api/conversations")).id as number;
+  const dir = await newDataDir();
+  const first = await startServer(dir, { hang: true });
+  const id = ((await (await fetch(`${first.base}/api/stream`)).json()) as { id: number }).id;
   await post(first.base, `/api/conversations/${id}/messages`, { text: "hello", requestId: "request-0002" });
   await follow(first.base, id, (state) => state.live.partial === "Stub answer");
   await first.kill();
 
-  const second = await startServer({ hang: false });
+  const second = await startServer(dir, { hang: false });
   try {
     const states = await follow(second.base, id, answered);
     const messages = states.at(-1)!.messages;

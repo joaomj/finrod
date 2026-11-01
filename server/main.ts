@@ -1,3 +1,4 @@
+import type { ConversationView } from "@earendil-works/pi-durable";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
@@ -5,6 +6,8 @@ import { Chat, liveOf, messagesOf, Refused, type Threads } from "./chat.js";
 import { loadConfig } from "./config.js";
 import { EXA_CALLBACK_PATH } from "./exa-auth.js";
 import { isStoredName, MAX_FILE_BYTES, mimeOfStoredName, type Attachment } from "./files.js";
+import { MAX_MEMORY_CHARS } from "./memories.js";
+import { MAX_CHUNK_BYTES, VoiceError } from "./voice.js";
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MESSAGE_CHARS = 32_000;
@@ -85,20 +88,26 @@ async function events(request: IncomingMessage, response: ServerResponse, store:
   });
   let lastMessages = "";
   let lastLive = "";
-  const stop = await store.watch(id, (view) => {
-    const messages = JSON.stringify(messagesOf(view));
+  let latest: ConversationView | undefined;
+  const publish = (view: ConversationView) => {
+    latest = view;
+    const messages = JSON.stringify(messagesOf(view, chat.memories));
     const live = JSON.stringify(liveOf(view));
     if (messages !== lastMessages) response.write(`event: messages\ndata: ${messages}\n\n`);
     if (live !== lastLive) response.write(`event: live\ndata: ${live}\n\n`);
     lastMessages = messages;
     lastLive = live;
-  });
+  };
+  const stop = await store.watch(id, publish);
   if (!stop) {
     response.end("event: missing\ndata: {}\n\n");
     return;
   }
+  // A memory the user approves or removes changes the line under an answer without changing the conversation.
+  const unsubscribe = chat.memories.onChange(() => latest && publish(latest));
   const keepAlive = setInterval(() => response.write(": keep-alive\n\n"), 25_000);
   request.on("close", () => {
+    unsubscribe();
     clearInterval(keepAlive);
     void stop();
   });
@@ -151,12 +160,44 @@ async function api(request: IncomingMessage, response: ServerResponse, path: str
     await chat.exa.disconnect();
     return json(response, 200, {});
   }
-  // Temporary conversations share the routes of permanent ones, under their own prefix.
-  const temporary = path === "/api/temporary" || path.startsWith("/api/temporary/");
-  const rest = temporary ? `/api${path.slice("/api/temporary".length)}` : path;
-  const store = temporary ? chat.temporary : chat.threads;
-  if (rest === "/api/conversations" && request.method === "GET") return json(response, 200, await store.list());
-  if (rest === "/api/conversations" && request.method === "POST") return json(response, 201, { id: await store.create() });
+  if (path === "/api/stream" && request.method === "GET") return json(response, 200, { id: await chat.threads.stream() });
+  if (path === "/api/memories" && request.method === "GET") return json(response, 200, chat.memories.list());
+  const memory = /^\/api\/memories\/(m-[0-9a-f]{8})(\/approve)?$/.exec(path);
+  if (memory) {
+    const id = memory[1]!;
+    let found: boolean;
+    if (memory[2] && request.method === "POST") found = await chat.memories.approve(id);
+    else if (!memory[2] && request.method === "DELETE") found = await chat.memories.remove(id);
+    else if (!memory[2] && request.method === "PUT") {
+      const body = await readJson(request);
+      const text = typeof body.text === "string" ? body.text.trim() : "";
+      if (!text || text.length > MAX_MEMORY_CHARS) throw new HttpError(400, `text must have 1 to ${MAX_MEMORY_CHARS} characters.`);
+      found = await chat.memories.edit(id, text);
+    } else throw new HttpError(405, "Method not allowed.");
+    if (!found) throw new HttpError(404, "Memory not found.");
+    return json(response, 200, {});
+  }
+  if (path === "/api/voice" && request.method === "POST") return json(response, 201, { id: await chat.voice.start() });
+  const voice = /^\/api\/voice\/([a-f0-9]{16})(?:\/(\d{1,6}|finish))?$/.exec(path);
+  if (voice) {
+    const [, id, part] = voice as unknown as [string, string, string | undefined];
+    if (!part && request.method === "DELETE") {
+      await chat.voice.cancel(id);
+      return json(response, 200, {});
+    }
+    if (part === "finish" && request.method === "POST") {
+      const body = await readJson(request);
+      const text = await chat.voice.finish(id, typeof body.extension === "string" ? body.extension : "");
+      return json(response, 200, { text });
+    }
+    if (part && part !== "finish" && request.method === "PUT") {
+      await chat.voice.chunk(id, part, await readBody(request, MAX_CHUNK_BYTES, "Audio chunk is too large."));
+      return json(response, 200, {});
+    }
+    throw new HttpError(405, "Method not allowed.");
+  }
+  const rest = path;
+  const store = chat.threads;
   const vote = /^\/api\/conversations\/(\d+)\/messages\/(\d+)\/vote$/.exec(rest);
   if (vote && request.method === "PUT") {
     const body = await readJson(request);
@@ -169,19 +210,25 @@ async function api(request: IncomingMessage, response: ServerResponse, path: str
     if (!(await store.remove(Number(conversation[1])))) throw new HttpError(404, "Conversation not found.");
     return json(response, 200, {});
   }
-  const match = /^\/api\/conversations\/(\d+)\/(messages|events)$/.exec(rest);
+  const match = /^\/api\/conversations\/(\d+)\/(messages|events|search)$/.exec(rest);
   if (!match) throw new HttpError(404, "Not found.");
   const id = Number(match[1]);
   if (match[2] === "events" && request.method === "GET") return events(request, response, store, id);
+  if (match[2] === "search" && request.method === "GET") {
+    const hits = await store.search(id, new URL(request.url ?? "/", "http://localhost").searchParams.get("q") ?? "");
+    if (!hits) throw new HttpError(404, "Conversation not found.");
+    return json(response, 200, hits);
+  }
   if (match[2] === "messages" && request.method === "POST") {
     const body = await readJson(request);
     const text = typeof body.text === "string" ? body.text.trim() : "";
     const requestId = typeof body.requestId === "string" ? body.requestId : "";
+    const voiceSeconds = typeof body.voice === "number" && body.voice >= 0 ? Math.round(body.voice) : undefined;
     const wanted = Array.isArray(body.files) ? body.files : [];
     if (text.length > MAX_MESSAGE_CHARS) throw new HttpError(400, `Message must be at most ${MAX_MESSAGE_CHARS} characters.`);
     if (!text && wanted.length === 0) throw new HttpError(400, "Message must have text or a file.");
     if (!/^[A-Za-z0-9-]{8,64}$/.test(requestId)) throw new HttpError(400, "requestId must be 8-64 letters, digits, or hyphens.");
-    if (!(await store.send(id, text, await filesOf(wanted), requestId))) throw new HttpError(404, "Conversation not found.");
+    if (!(await store.send(id, text, await filesOf(wanted), requestId, voiceSeconds))) throw new HttpError(404, "Conversation not found.");
     return json(response, 202, {});
   }
   throw new HttpError(405, "Method not allowed.");
@@ -208,7 +255,7 @@ const server = createServer(async (request, response) => {
     else if (path.startsWith("/api/")) await api(request, response, path);
     else await file(response, path);
   } catch (error) {
-    if (error instanceof HttpError) return json(response, error.status, { error: error.message });
+    if (error instanceof HttpError || error instanceof VoiceError) return json(response, error.status, { error: error.message });
     if (error instanceof Refused) return json(response, 409, { error: error.message });
     console.error(`${request.method} ${path} failed:`, error);
     if (!response.headersSent) json(response, 500, { error: "Internal error." });

@@ -7,6 +7,8 @@ export type Config = {
   readonly model: string;
   /** Address the browser opens Finrod at; Exa's sign-in returns there. */
   readonly publicUrl: string;
+  /** Script that prints the transcript of the audio file it is given; voice is off without it. */
+  readonly transcribeCommand?: string;
 };
 
 /** Read and validate settings from the environment; throw with the setting name and the fix. */
@@ -35,6 +37,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   return {
     port,
     publicUrl,
+    ...(env.FINROD_TRANSCRIBE_COMMAND ? { transcribeCommand: resolve(env.FINROD_TRANSCRIBE_COMMAND) } : {}),
     dataDir: resolve(env.FINROD_DATA_DIR ?? ".finrod"),
     profile,
     model: env.FINROD_MODEL ?? "deepseek/deepseek-v4.1-flash-1017",

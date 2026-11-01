@@ -15,19 +15,19 @@ migration.
 
 ## What it does
 
-- Chat with streamed answers and Markdown, in separate conversations that
-  any tailnet device can reopen.
+- Chat with streamed answers and Markdown in one continuous stream that any
+  tailnet device can reopen, with search.
 - Web research through Exa, with the sources listed under each answer.
   Connect your own Exa account to avoid the free tier's rate limit.
 - Send photos, screenshots, PDFs, and text files, up to 20 MB each.
 - Thumbs up or down on each answer.
-- Delete a conversation, or start a temporary one that is never written to
-  disk.
+- Memory you review: Finrod proposes, you approve, edit, or delete.
+- Hold the send button to speak; the server transcribes it locally.
 - A server restart loses no saved message; an answer cut off by it shows as
   interrupted.
 
-v0.3.0 has no voice input. See the voice decision in the
-[v0.3.0 requirements](docs/PRD-v030.md#voice-decision).
+Voice needs a transcribe command on the server; see
+[Operations](docs/OPERATIONS.md).
 
 ## Setup
 

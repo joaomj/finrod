@@ -6,8 +6,7 @@ tailnet. The server owns all conversation state. The browser only shows it.
 
 The durable pi harness (`@earendil-works/pi-durable`) runs the agent: model
 streaming, tool calls, retries, and the restart-safe log. Finrod adds the web
-app, the HTTP layer, file handling, feedback, deletion, and temporary
-conversations.
+app, the HTTP layer, file handling, feedback, memory, voice, and deletion.
 
 ## Components
 
@@ -15,18 +14,20 @@ conversations.
 | --- | --- | --- |
 | HTTP server | Static app files, JSON API, Server-Sent Events, uploads, error mapping | `server/main.ts` |
 | Configuration | Read and validate environment settings at startup | `server/config.ts` |
-| Conversations | Permanent and temporary stores, send, vote, delete, view mapping | `server/chat.ts` |
+| Conversations | The stream, send, vote, search, delete, view mapping | `server/chat.ts` |
+| Memory | Proposed and approved memories in `memories.json`, the `remember` tool | `server/memories.ts` |
+| Voice | Chunked audio upload, transcribe command, audio deletion | `server/voice.ts` |
 | Files | Type detection, stored originals, PDF and text extraction | `server/files.ts` |
 | Research | `web_search` and `web_fetch` tools through Exa MCP | `server/research.ts` |
 | Exa account | OAuth sign-in to the user's Exa account, token file | `server/exa-auth.ts` |
-| Web app | Conversation list, chat view, Markdown, composer, attachments | `app/main.ts`, `app/index.html`, `app/style.css` |
+| Web app | Stream, sheets (search, memory), queue, composer, recording, keyboard | `app/main.ts`, `app/index.html`, `app/style.css` |
 | Build | Bundle app and server into `dist/`, version the app's script and style | `scripts/build.mjs` |
 | Release archive | Built app, production dependencies, deploy files, checksum | `scripts/package.sh` |
 | Deployment | systemd user units and the update script | `deploy/` |
 
 ## Request flow
 
-1. The app creates a conversation or opens one from the list.
+1. The app asks `GET /api/stream` for the profile's conversation. The server creates it on first use.
 2. The app subscribes to `GET /api/conversations/<id>/events`. The server
    sends the message list and the live status as Server-Sent Events.
 3. Files upload first, one request per file, to `POST /api/files`. The server
@@ -40,7 +41,9 @@ conversations.
    titles and URLs from those tool results and shows them as the answer's
    sources.
 
-Temporary conversations use the same routes under `/api/temporary/`.
+A recording uploads as chunks to `PUT /api/voice/<id>/<n>`. `POST /api/voice/<id>/finish` joins them, runs `FINROD_TRANSCRIBE_COMMAND`, deletes the audio, and returns the transcript. The app then sends the transcript as a message with the recording's length.
+
+The model's `remember` tool proposes a memory. The app lists memories at `/api/memories` and approves, edits, or deletes them. Approved memories are added to the model's instructions on the next message.
 
 ## Storage
 
@@ -51,15 +54,14 @@ The data directory (`FINROD_DATA_DIR`) holds one folder per profile:
   finrod.sqlite     pi-durable log: conversations, entries, documents
   files/            stored originals, named <uuid>.<ext>, mode 0600
   exa-oauth.json    Exa sign-in, mode 0600, present after connecting Exa
+  memories.json     proposed and approved memories, mode 0600
+  voice/            recordings in progress; deleted after transcription
 ```
 
 - Messages, answers, tool results, votes, and the conversation index are
   entries or documents in `finrod.sqlite`.
 - A message with files is a `finrod.message` entry that lists the files.
 - A vote is a `finrod.feedback` entry. The newest vote for an answer wins.
-- Temporary conversations use a second pi-durable store in memory. Nothing of
-  them reaches disk, and they end when the process ends. They do not accept
-  files.
 
 ### Deletion
 

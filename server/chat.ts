@@ -18,20 +18,29 @@ import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite
 import type { Config } from "./config.js";
 import { ExaAuth } from "./exa-auth.js";
 import { describeStoredFile, readStoredFile, storeFile, type Attachment } from "./files.js";
+import { Memories, REMEMBER_TOOL, remembering, type Memory } from "./memories.js";
 import { research } from "./research.js";
+import { Voice } from "./voice.js";
 
 const INSTRUCTIONS = [
   "You are Finrod, a personal assistant. Answer in the language the user writes in. Be direct and concise.",
   "Use web_search whenever the answer depends on current or external facts you cannot know for certain.",
   "Do not answer such questions from memory and do not send the user to look it up.",
   "Cite the sources you used as Markdown links next to the facts they support.",
+  "When the user states a lasting fact about themselves or a lasting preference, call remember once for it, with a short sentence in the user's language.",
+  "Do not remember passing details, questions, or anything that matters only to this exchange. Never mention that you remembered something; the app tells the user.",
 ].join(" ");
-const TITLE_LENGTH = 60;
+const MAX_SNIPPET = 160;
+const MAX_HITS = 20;
 
-export type ConversationSummary = { id: number; title: string; updatedAt: number; temporary: boolean };
+/** The model's instructions: Finrod's rules plus what the user approved Finrod to know. */
+function instructionsFor(saved: readonly Memory[]): string {
+  if (saved.length === 0) return INSTRUCTIONS;
+  return `${INSTRUCTIONS}\n\nWhat you know about the user, approved by them:\n${saved.map((memory) => `- ${memory.text}`).join("\n")}`;
+}
 
-/** Finrod's own index of conversations: titles and last activity, newest first. */
-const ConversationIndex = defineDoc<{ items: Omit<ConversationSummary, "temporary">[] }>({
+/** Finrod's own index of conversations, newest first. The app opens the newest one as the user's stream. */
+const ConversationIndex = defineDoc<{ items: { id: number }[] }>({
   kind: "finrod.conversations",
   version: 1,
   scope: "session",
@@ -43,18 +52,26 @@ export type Vote = "up" | "down";
 export type Source = { title: string; url: string };
 /** What the app shows of a sent file; the text sent to the model stays on the server. */
 export type SentFile = Pick<Attachment, "id" | "kind" | "name" | "mime" | "size" | "unreadable">;
+export type RememberedMemory = Pick<Memory, "id" | "text" | "status">;
 export type ChatMessage = {
   id: number;
   role: "user" | "assistant";
+  /** Milliseconds since the epoch when the message was written. */
+  at: number;
   text: string;
   error?: string;
   vote?: Vote;
   sources?: Source[];
   files?: SentFile[];
+  /** Seconds of speech a spoken message was transcribed from. */
+  voice?: number;
+  /** Memories Finrod proposed while writing this answer. */
+  memories?: RememberedMemory[];
 };
+export type SearchHit = { id: number; role: "user" | "assistant"; at: number; text: string };
 /** Kind of an input placed with files, so the transcript keeps their names next to the text. */
 const MESSAGE_KIND = "finrod.message";
-type MessageData = { text: string; files: SentFile[] };
+type MessageData = { text: string; files: SentFile[]; voice?: number };
 /** A thumbs vote on one answer; the newest entry for a target wins, and `vote: null` clears it. */
 const FEEDBACK = "finrod.feedback";
 type FeedbackData = { target: number; vote: Vote | null };
@@ -68,24 +85,24 @@ type ThreadsOpen = {
   readonly registry: Registry;
   readonly model: { provider: string; modelId: string };
   readonly storage: Awaited<ReturnType<typeof openNodeSqliteStorage>>;
-  /** Absent for temporary conversations, which never write a file. */
-  readonly filesDir?: string;
-  /** Absent for temporary conversations, whose database is in memory. */
-  readonly databasePath?: string;
+  readonly filesDir: string;
+  readonly databasePath: string;
+  readonly memories: Memories;
 };
 
-/**
- * Conversations of one store. The permanent store is the profile's SQLite file; the temporary store
- * lives in memory and ends with the process.
- */
+/** The conversations of the profile's SQLite file. */
 export class Threads {
   private constructor(
     private readonly harness: Harness,
     private readonly model: { provider: string; modelId: string },
-    private readonly filesDir: string | undefined,
-    private readonly databasePath: string | undefined,
-    readonly temporary: boolean,
+    private readonly filesDir: string,
+    private readonly databasePath: string,
+    private readonly memories: Memories,
   ) {}
+
+  /** The instructions last written to a conversation by this process. */
+  private instructions = "";
+  private creating: Promise<number> | undefined;
 
   /**
    * Conversations removed in this process. The harness keeps a removed conversation in memory, so Finrod
@@ -101,7 +118,7 @@ export class Threads {
   static async open(open: ThreadsOpen): Promise<Threads> {
     const harness = await Harness.open(open.storage, { models: open.models, registry: open.registry }, context);
     harness.resume();
-    return new Threads(harness, open.model, open.filesDir, open.databasePath, open.filesDir === undefined);
+    return new Threads(harness, open.model, open.filesDir, open.databasePath, open.memories);
   }
 
   /** Settles when the store closes; `failed` means the process must restart. */
@@ -113,51 +130,54 @@ export class Threads {
     return this.harness.close(context);
   }
 
-  async list(): Promise<ConversationSummary[]> {
+  /** The user's stream: the newest conversation, created on first use. */
+  async stream(): Promise<number> {
     const items = (await this.harness.snapshot(ConversationIndex, context))?.items ?? [];
-    return items.map((item) => ({ ...item, temporary: this.temporary }));
+    if (items[0]) return items[0].id;
+    this.creating ??= this.create().finally(() => {
+      this.creating = undefined;
+    });
+    return this.creating;
   }
 
-  async create(): Promise<number> {
+  private async create(): Promise<number> {
+    const instructions = instructionsFor(this.memories.saved());
     const conversation = await this.harness.createConversation(
       {
         ownership: { kind: "ownerless" },
-        agent: { model: this.model, instructions: INSTRUCTIONS },
+        agent: { model: this.model, instructions },
         init: async (tx, id) => {
-          (await tx.doc(ConversationIndex)).items.unshift({ id, title: "", updatedAt: Date.now() });
+          (await tx.doc(ConversationIndex)).items.unshift({ id });
         },
       },
       context,
     );
+    this.instructions = instructions;
     return conversation.id;
   }
 
   /**
    * Admit a message; a repeated `requestId` returns the original submission instead of sending twice. Files
-   * go to the model as image content, or as document text.
+   * go to the model as image content, or as document text. Approved memories reach the model through its instructions.
    */
-  async send(id: number, text: string, files: readonly Attachment[], requestId: string): Promise<boolean> {
-    if (files.length && this.temporary) throw new Refused("Temporary conversations do not keep files.");
+  async send(id: number, text: string, files: readonly Attachment[], requestId: string, voice?: number): Promise<boolean> {
     const conversation = await this.handle(id);
     if (!conversation) return false;
-    const content = await this.contentOf(text, files);
-    const draft =
-      files.length === 0
-        ? { type: "input" as const, content: text, requestId }
-        : {
-            type: "input" as const,
-            content,
-            requestId,
-            entry: { kind: MESSAGE_KIND, data: { text, files: files.map(sentFile) } satisfies MessageData },
-          };
+    const instructions = instructionsFor(this.memories.saved());
+    if (instructions !== this.instructions) {
+      await conversation.configure({ instructions }, context);
+      this.instructions = instructions;
+    }
+    const plain = files.length === 0 && voice === undefined;
+    const draft = plain
+      ? { type: "input" as const, content: text, requestId }
+      : {
+          type: "input" as const,
+          content: await this.contentOf(text, files),
+          requestId,
+          entry: { kind: MESSAGE_KIND, data: { text, files: files.map(sentFile), ...(voice === undefined ? {} : { voice }) } satisfies MessageData },
+        };
     await conversation.submit(draft, context);
-    await this.harness.commit(async (tx) => {
-      const index = await tx.doc(ConversationIndex);
-      const at = index.items.findIndex((item) => item.id === id);
-      const title = at >= 0 && index.items[at]!.title ? index.items[at]!.title : titleOf(text || files.map((file) => file.name).join(", "));
-      if (at >= 0) index.items.splice(at, 1);
-      index.items.unshift({ id, title, updatedAt: Date.now() });
-    }, context);
     return true;
   }
 
@@ -167,7 +187,7 @@ export class Threads {
     if (text) content.push({ type: "text", text });
     for (const file of files) {
       if (file.kind === "image") {
-        const bytes = await readStoredFile(this.filesDir!, file.id);
+        const bytes = await readStoredFile(this.filesDir, file.id);
         content.push({ type: "image", data: bytes.toString("base64"), mimeType: file.mime });
       } else if (file.text) {
         content.push({ type: "text", text: `--- ${file.name} ---\n${file.text}` });
@@ -190,6 +210,29 @@ export class Threads {
     return true;
   }
 
+  /** Messages whose text contains `query`, ignoring case and accents, newest first. */
+  async search(id: number, query: string): Promise<SearchHit[] | undefined> {
+    const conversation = await this.handle(id);
+    if (!conversation) return undefined;
+    const view = await conversation.viewState(context);
+    const messages = messagesOf(view.value, this.memories);
+    view.dispose();
+    const fold = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    const wanted = fold(query.trim());
+    if (!wanted) return [];
+    const hits: SearchHit[] = [];
+    for (const message of [...messages].reverse()) {
+      if (!message.text) continue;
+      const at = fold(message.text).indexOf(wanted);
+      if (at < 0) continue;
+      const from = Math.max(0, at - 40);
+      const snippet = message.text.slice(from, from + MAX_SNIPPET);
+      hits.push({ id: message.id, role: message.role, at: message.at, text: `${from > 0 ? "…" : ""}${snippet}${from + MAX_SNIPPET < message.text.length ? "…" : ""}` });
+      if (hits.length === MAX_HITS) break;
+    }
+    return hits;
+  }
+
   /** Follow one conversation; `onView` gets the current view, then every committed change. */
   async watch(id: number, onView: (view: ConversationView) => void): Promise<(() => Promise<unknown>) | undefined> {
     const conversation = await this.handle(id);
@@ -201,9 +244,8 @@ export class Threads {
   }
 
   /**
-   * Remove a conversation. A temporary one leaves the list and its memory ends with the process. A permanent
-   * one loses its messages, its documents, and its stored files from the profile, because pi-durable has no API
-   * to remove a conversation.
+   * Remove a conversation: its messages, its documents, and its stored files leave the profile, because pi-durable
+   * has no API to remove a conversation.
    */
   async remove(id: number): Promise<boolean> {
     const conversation = await this.handle(id);
@@ -215,7 +257,7 @@ export class Threads {
 
     const { entries } = await conversation.context(context);
     const files = entries.flatMap((entry) => (entry.kind === MESSAGE_KIND ? (entry.data as MessageData).files.map((file) => file.id) : []));
-    if (!this.temporary) this.deleteRows(id);
+    this.deleteRows(id);
 
     await this.harness.commit(async (tx) => {
       const index = await tx.doc(ConversationIndex);
@@ -223,14 +265,14 @@ export class Threads {
       if (at >= 0) index.items.splice(at, 1);
     }, context);
 
-    if (this.filesDir) await Promise.all(files.map((name) => rm(join(this.filesDir!, name), { force: true })));
+    await Promise.all(files.map((name) => rm(join(this.filesDir, name), { force: true })));
     this.removed.add(id);
     return true;
   }
 
   /** Delete one conversation's rows, and the rows of its documents, in the profile database. */
   private deleteRows(id: number): void {
-    const database = new DatabaseSync(this.databasePath!, { timeout: 5_000 });
+    const database = new DatabaseSync(this.databasePath, { timeout: 5_000 });
     try {
       database.exec("BEGIN IMMEDIATE");
       const documents = "SELECT id FROM documents WHERE scope_kind = 'conversation' AND owner_id = " + Number(id);
@@ -252,13 +294,14 @@ export class Threads {
   }
 }
 
-/** Everything the HTTP layer needs: the two stores, the profile's files, and the Exa account. */
+/** Everything the HTTP layer needs: the conversations, the profile's files, memories, voice, and the Exa account. */
 export class Chat {
   private constructor(
     readonly threads: Threads,
-    readonly temporary: Threads,
     private readonly filesDir: string,
     readonly exa: ExaAuth,
+    readonly memories: Memories,
+    readonly voice: Voice,
   ) {}
 
   static async open(config: Config): Promise<Chat> {
@@ -276,30 +319,30 @@ export class Chat {
     await mkdir(files, { recursive: true, mode: 0o700 });
     const databasePath = join(dir, "finrod.sqlite");
     const exa = new ExaAuth(join(dir, "exa-oauth.json"), config.publicUrl);
+    const memories = await Memories.open(join(dir, "memories.json"));
+    const voice = await Voice.open(join(dir, "voice"), config.transcribeCommand);
     const registry = createRegistry();
     registry.install(research(exa));
-    const model = { provider: "openrouter", modelId: config.model };
+    registry.install(remembering(memories));
     const threads = await Threads.open({
       models,
       registry,
-      model,
+      model: { provider: "openrouter", modelId: config.model },
       storage: await openNodeSqliteStorage(databasePath),
       filesDir: files,
       databasePath,
+      memories,
     });
-    // Temporary conversations exist only while the process runs.
-    const temporary = await Threads.open({ models, registry, model, storage: await openNodeSqliteStorage(":memory:") });
-    return new Chat(threads, temporary, files, exa);
+    return new Chat(threads, files, exa, memories, voice);
   }
 
-  /** Settles when the permanent store closes; `failed` means the process must restart. */
+  /** Settles when the store closes; `failed` means the process must restart. */
   get closed() {
     return this.threads.closed;
   }
 
-  async close() {
-    await this.threads.close();
-    await this.temporary.close();
+  close() {
+    return this.threads.close();
   }
 
   /**
@@ -326,11 +369,6 @@ function sentFile(file: Attachment): SentFile {
   return { id, kind, name, mime, size, ...(unreadable ? { unreadable } : {}) };
 }
 
-function titleOf(text: string): string {
-  const line = text.trim().replace(/\s+/g, " ");
-  return line.length > TITLE_LENGTH ? `${line.slice(0, TITLE_LENGTH - 1)}…` : line;
-}
-
 /** Search and read tools whose results carry the pages an answer rests on. */
 const RESEARCH_TOOLS = new Set(["web_search", "web_fetch"]);
 const MAX_SOURCES = 6;
@@ -353,10 +391,11 @@ function sourcesFrom(text: string): Source[] {
   return sources;
 }
 
-export function messagesOf(view: ConversationView): ChatMessage[] {
+export function messagesOf(view: ConversationView, memories: Memories): ChatMessage[] {
   const votes = new Map<number, Vote | null>();
   // Sources are attached by Finrod from the tool results, not asked of the model.
   let found: Source[] = [];
+  let remembered: string[] = [];
   for (const entry of view.entries) {
     if (entry.kind === FEEDBACK) {
       const data = entry.data as FeedbackData;
@@ -369,13 +408,25 @@ export function messagesOf(view: ConversationView): ChatMessage[] {
     if (entry.kind === "pi.tool-result" && message?.role === "toolResult" && RESEARCH_TOOLS.has(message.toolName) && !message.isError) {
       const text = message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
       found.push(...sourcesFrom(text));
+    } else if (entry.kind === "pi.tool-result" && message?.role === "toolResult" && message.toolName === REMEMBER_TOOL && !message.isError) {
+      const id = /\(id (m-[0-9a-f]{8})\)/.exec(message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n"));
+      if (id) remembered.push(id[1]!);
     } else if (entry.kind === MESSAGE_KIND) {
       const data = entry.data as MessageData;
       found = [];
-      messages.push({ id: entry.id, role: "user", text: data.text, ...(data.files.length ? { files: data.files } : {}) });
+      remembered = [];
+      messages.push({
+        id: entry.id,
+        role: "user",
+        at: message?.timestamp ?? 0,
+        text: data.text,
+        ...(data.files.length ? { files: data.files } : {}),
+        ...(data.voice === undefined ? {} : { voice: data.voice }),
+      });
     } else if (entry.kind === "pi.user" && message?.role === "user") {
       found = [];
-      messages.push({ id: entry.id, role: "user", text: userText(message) });
+      remembered = [];
+      messages.push({ id: entry.id, role: "user", at: message.timestamp, text: userText(message) });
     } else if (entry.kind === "pi.assistant" && message?.role === "assistant") {
       const text = assistantText(message);
       const error =
@@ -387,8 +438,13 @@ export function messagesOf(view: ConversationView): ChatMessage[] {
       if (!text && !error) continue;
       const vote = votes.get(entry.id);
       const sources = answerSources(found);
+      const kept = remembered.flatMap((id) => {
+        const memory = memories.get(id);
+        return memory ? [{ id: memory.id, text: memory.text, status: memory.status }] : [];
+      });
       found = [];
-      messages.push({ id: entry.id, role: "assistant", text, ...(error ? { error } : {}), ...(vote ? { vote } : {}), ...(sources.length ? { sources } : {}) });
+      remembered = [];
+      messages.push({ id: entry.id, role: "assistant", at: message.timestamp, text, ...(error ? { error } : {}), ...(vote ? { vote } : {}), ...(sources.length ? { sources } : {}), ...(kept.length ? { memories: kept } : {}) });
     }
   }
   return messages;

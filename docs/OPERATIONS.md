@@ -13,6 +13,7 @@ is wrong. The error names the setting and how to fix it.
 | --- | --- | --- | --- |
 | `OPENROUTER_API_KEY` | Yes | None | OpenRouter API key |
 | `FINROD_PUBLIC_URL` | For Exa sign-in | `http://127.0.0.1:<port>` | HTTPS origin the phone opens; Exa sign-in returns there |
+| `FINROD_TRANSCRIBE_COMMAND` | For voice | None | Executable that prints the transcript of the audio file it gets. `scripts/transcribe.py` does this with faster-whisper (`pip install faster-whisper av numpy`). Without it, holding the send button shows an error |
 | `FINROD_MODEL` | No | `deepseek/deepseek-v4.1-flash-1017` | OpenRouter model ID |
 | `FINROD_PORT` | No | `8787` | Port on `127.0.0.1` |
 | `FINROD_DATA_DIR` | No | `.finrod` | Data directory; the service sets it |
@@ -77,9 +78,8 @@ tailscale ssh <user>@<server> finrod-update
 
 Only one update runs at a time. Node updates are manual.
 
-**Caution:** a restart ends all temporary conversations. Permanent
-conversations continue; an answer cut off by the restart shows as
-interrupted.
+A restart loses no saved message; an answer cut off by the restart shows as
+interrupted. A recording in progress is lost.
 
 ## Releases
 

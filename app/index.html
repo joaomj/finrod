@@ -15,39 +15,49 @@
   <script type="module" src="main.js"></script>
 </head>
 <body>
-  <aside id="sidebar" aria-label="Conversas">
-    <button id="new" type="button">Nova conversa</button>
-    <button id="temporary" type="button">Conversa temporária</button>
-    <p class="hint">Não é guardada no servidor. Termina quando o Finrod reiniciar.</p>
-    <nav id="list"></nav>
-    <button id="exa" type="button" hidden></button>
-  </aside>
-  <div id="scrim" hidden></div>
-  <main>
-    <header>
-      <button id="menu" type="button" aria-label="Conversas">
+  <div id="app">
+    <header id="bar">
+      <button id="menu" type="button" aria-label="Menu">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
-      <h1 id="title">Finrod</h1>
-      <button id="delete" type="button" aria-label="Excluir conversa" hidden>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>
+      <h1>Finrod</h1>
+      <button id="search" type="button" aria-label="Buscar">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>
       </button>
     </header>
     <section id="messages" aria-live="polite"></section>
     <form id="composer">
+      <div id="notes"></div>
       <div id="tray" hidden></div>
-      <div class="line">
+      <div id="line">
         <button id="attach" type="button" aria-label="Anexar arquivo">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.5 12 21a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10 19a2 2 0 0 1-3-3l8-8"/></svg>
         </button>
         <input id="picker" type="file" multiple hidden
           accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,text/markdown,text/csv,.pdf,.txt,.md,.csv">
         <textarea id="input" rows="1" placeholder="Mensagem" autocomplete="off" enterkeyhint="send" aria-label="Mensagem"></textarea>
-        <button id="send" type="submit" aria-label="Enviar" disabled>
+        <button id="round" type="button" class="off" aria-label="Enviar (segure para falar)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
         </button>
       </div>
+      <div id="rec" hidden>
+        <span class="dot"></span>
+        <span id="timer">0:00</span>
+        <div id="wave" aria-hidden="true"></div>
+        <button id="pause" type="button" class="icon" aria-label="Pausar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5v14M15 5v14"/></svg>
+        </button>
+        <button id="cancel" type="button" class="icon" aria-label="Cancelar gravação">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <button id="finish" type="button" class="icon solid" aria-label="Enviar gravação">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        </button>
+      </div>
+      <p id="hint">toque envia · segure para falar</p>
     </form>
-  </main>
+    <div id="scrim" hidden></div>
+    <section id="sheet" hidden aria-modal="true" role="dialog"></section>
+  </div>
 </body>
 </html>
