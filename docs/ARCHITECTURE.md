@@ -16,7 +16,7 @@ app, the HTTP layer, file handling, feedback, memory, voice, and deletion.
 | Configuration | Read and validate environment settings at startup | `server/config.ts` |
 | Conversations | The stream, send, vote, search, delete, view mapping | `server/chat.ts` |
 | Memory | Proposed and approved memories in `memories.json`, the `remember` tool | `server/memories.ts` |
-| Voice | Chunked audio upload, transcribe command, audio deletion | `server/voice.ts` |
+| Voice | Chunked audio upload, transcription while recording, audio deletion | `server/voice.ts`, `scripts/transcribe.py` |
 | Files | Type detection, stored originals, PDF and text extraction | `server/files.ts` |
 | Research | `web_search` and `web_fetch` tools through Exa MCP | `server/research.ts` |
 | Exa account | OAuth sign-in to the user's Exa account, token file | `server/exa-auth.ts` |
@@ -41,7 +41,7 @@ app, the HTTP layer, file handling, feedback, memory, voice, and deletion.
    titles and URLs from those tool results and shows them as the answer's
    sources.
 
-A recording uploads as chunks to `PUT /api/voice/<id>/<n>`. `POST /api/voice/<id>/finish` joins them, runs `FINROD_TRANSCRIBE_COMMAND`, deletes the audio, and returns the transcript. The app then sends the transcript as a message with the recording's length.
+`POST /api/voice` starts a recording and names its audio format. The app uploads the recording as chunks to `PUT /api/voice/<id>/<n>`. About every 12 seconds, the server joins the chunks received so far and runs `FINROD_TRANSCRIBE_COMMAND` on the speech after what it already kept. It keeps only segments that end at least 3 seconds before the end of the audio, because the last words may be cut. `POST /api/voice/<id>/finish` stops any pass in flight, transcribes the rest, deletes the audio, and returns the transcript. The app then sends the transcript as a message with the recording's length.
 
 The model's `remember` tool proposes a memory. The app lists memories at `/api/memories` and approves, edits, or deletes them. Approved memories are added to the model's instructions on the next message.
 

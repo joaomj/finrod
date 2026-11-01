@@ -14,7 +14,7 @@ verification evidence and known limits.
 - Images, PDFs, and text files in a message, up to 20 MB each. PDF pages without a text layer are named in the message.
 - Thumbs up or down on each answer.
 - Memory: Finrod proposes a memory when you state a lasting fact. You approve, edit, or delete it in the memory sheet; only approved memories reach the model.
-- Voice input: hold the send button to record, with pause, cancel, and chunked upload. The server transcribes locally with faster-whisper and deletes the audio.
+- Voice input: hold the send button to record, with pause, cancel, and chunked upload. The server transcribes locally with faster-whisper while you speak, so the text is ready a few seconds after you stop, and deletes the audio.
 - Messages sent while an answer runs wait in a queue that you can withdraw.
 - Keyboard handling for the iPhone: the shell follows `visualViewport`, and the header hides while you type.
 - Home-screen install on the iPhone, with a manifest and icons.

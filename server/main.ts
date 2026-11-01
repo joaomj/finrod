@@ -177,7 +177,10 @@ async function api(request: IncomingMessage, response: ServerResponse, path: str
     if (!found) throw new HttpError(404, "Memory not found.");
     return json(response, 200, {});
   }
-  if (path === "/api/voice" && request.method === "POST") return json(response, 201, { id: await chat.voice.start() });
+  if (path === "/api/voice" && request.method === "POST") {
+    const body = await readJson(request);
+    return json(response, 201, { id: await chat.voice.start(typeof body.extension === "string" ? body.extension : "") });
+  }
   const voice = /^\/api\/voice\/([a-f0-9]{16})(?:\/(\d{1,6}|finish))?$/.exec(path);
   if (voice) {
     const [, id, part] = voice as unknown as [string, string, string | undefined];
@@ -186,9 +189,7 @@ async function api(request: IncomingMessage, response: ServerResponse, path: str
       return json(response, 200, {});
     }
     if (part === "finish" && request.method === "POST") {
-      const body = await readJson(request);
-      const text = await chat.voice.finish(id, typeof body.extension === "string" ? body.extension : "");
-      return json(response, 200, { text });
+      return json(response, 200, { text: await chat.voice.finish(id) });
     }
     if (part && part !== "finish" && request.method === "PUT") {
       await chat.voice.chunk(id, part, await readBody(request, MAX_CHUNK_BYTES, "Audio chunk is too large."));

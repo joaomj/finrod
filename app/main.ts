@@ -553,9 +553,11 @@ async function startRecording() {
   let stream: MediaStream | undefined;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const { id } = await request<{ id: string }>("/api/voice", { method: "POST", body: "{}" });
     const mime = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((type) => MediaRecorder.isTypeSupported(type));
     const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    const type = recorder.mimeType;
+    const extension = type.includes("mp4") ? "mp4" : type.includes("webm") ? "webm" : type.includes("ogg") ? "ogg" : "m4a";
+    const { id } = await request<{ id: string }>("/api/voice", { method: "POST", body: JSON.stringify({ extension }) });
     const audio = new AudioContext();
     const analyser = audio.createAnalyser();
     audio.createMediaStreamSource(stream).connect(analyser);
@@ -627,9 +629,7 @@ async function finishRecording() {
     await r.uploads;
     release(r);
     if (r.uploadError) throw new Error(`O áudio não chegou ao servidor: ${r.uploadError}`);
-    const type = r.recorder.mimeType;
-    const extension = type.includes("mp4") ? "mp4" : type.includes("webm") ? "webm" : type.includes("ogg") ? "ogg" : "m4a";
-    const { text } = await request<{ text: string }>(`/api/voice/${r.id}/finish`, { method: "POST", body: JSON.stringify({ extension }) });
+    const { text } = await request<{ text: string }>(`/api/voice/${r.id}/finish`, { method: "POST", body: "{}" });
     const files = attachments.filter((item) => !item.sending).map((item) => item.file);
     attachments = [];
     renderTray();
