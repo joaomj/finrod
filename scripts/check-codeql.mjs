@@ -30,7 +30,8 @@ for (const file of files) {
         throw new Error(`${file}: invalid security severity for ${rule.id}.`);
       }
       if ((severity !== undefined && severity >= 7) || (result.level ?? rule.defaultConfiguration?.level) === "error") {
-        console.error(`Blocking CodeQL finding: ${rule.id} (security severity ${severity ?? "unspecified"}).`);
+        const where = result.locations?.[0]?.physicalLocation;
+        console.error(`Blocking CodeQL finding: ${rule.id} (security severity ${severity ?? "unspecified"}) at ${where?.artifactLocation?.uri ?? "?"}:${where?.region?.startLine ?? "?"}: ${result.message?.text ?? ""}`);
         blocked++;
       }
     }
