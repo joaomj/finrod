@@ -4,6 +4,8 @@
 # Tailscale Serve publishes Synapse on :8448 and MAS on :8449. Federation off.
 # Rerunnable: existing secrets, configs, and accounts are kept.
 set -euo pipefail
+# The names below stay off GitHub: set them in the environment or in ~/matrix/install.conf.
+[ ! -f $HOME/matrix/install.conf ] || . $HOME/matrix/install.conf
 SERVER=${MATRIX_SERVER_NAME:?Set MATRIX_SERVER_NAME to the Matrix server name, such as example.org.}
 HOST=${MATRIX_HOST:?Set MATRIX_HOST to the Tailscale Serve name of this machine, such as host.tailnet.ts.net.}
 PEOPLE=${MATRIX_USERS:?Set MATRIX_USERS to the Matrix user names of the people, separated by spaces, such as "alice bob".}

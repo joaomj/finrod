@@ -351,8 +351,16 @@ The messenger channel is a Matrix server on the mini PC. It runs as user
 Copy `deploy/matrix-install.sh` to the mini PC and run it as `joao`, with
 `MATRIX_SERVER_NAME` set to the server name, `MATRIX_HOST` to the mini
 PC's Tailscale Serve name, and `MATRIX_USERS` to the people's user names,
-separated by spaces. It is
-safe to run again: it keeps existing secrets, configs, and accounts. It:
+separated by spaces. Set them in the environment or in
+`~/matrix/install.conf`, which the script reads if it exists:
+
+```sh
+MATRIX_SERVER_NAME=example.org
+MATRIX_HOST=host.tailnet.ts.net
+MATRIX_USERS="alice bob"
+```
+
+It is safe to run again: it keeps existing secrets, configs, and accounts. It:
 
 1. Writes the MAS and Synapse configs. Two settings differ from the
    generated files: the MAS `issuer` must be the public address, and
