@@ -1,0 +1,5 @@
+# The versions tested on the mini PC with Element X voice notes (ADR 0001). PyAV 19 needs the decoding in transcribe.py.
+faster-whisper==1.2.1
+ctranslate2==4.8.5
+av==19.0.2
+numpy==2.5.4

@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Install the latest Finrod GitHub release, restart Finrod, and roll back if it does not answer.
+set -euo pipefail
+
+REPO=joaomj/finrod
+ROOT=$HOME/.local/share/finrod
+RELEASES=$ROOT/releases
+KEEP=3
+
+mkdir -p "$RELEASES"
+exec 9>"$ROOT/update.lock"
+flock -n 9 || { echo "Another Finrod update is running." >&2; exit 1; }
+
+port=$(sed -n 's/^FINROD_PORT=//p' "$ROOT/finrod.env" | tail -1)
+port=${port:-8787}
+# Finrod answers only requests that carry the gateway token. The token stays out of curl's arguments.
+token=$(sed -n 's/^FINROD_GATEWAY_TOKEN=//p' "$ROOT/finrod.env" | tail -1)
+provider=$(sed -n 's/^FINROD_PROVIDER=//p' "$ROOT/finrod.env" | tail -1)
+
+# With claude-directsdk, Finrod runs ~/.local/bin/claude. A release names the Claude Code version it was tested with:
+# install that version if it is missing and point the link at it, so a rollback also goes back to its version.
+use_claude() {
+  [[ $provider == claude-directsdk && -f $1/claude-code-version ]] || return 0
+  local version
+  version=$(<"$1/claude-code-version")
+  local binary=$HOME/.local/share/claude/versions/$version
+  [[ -x $binary ]] || curl -fsSL https://claude.ai/install.sh | bash -s "$version"
+  ln -sfn "$binary" "$HOME/.local/bin/claude"
+}
+
+healthy() {
+  for _ in $(seq 30); do
+    printf 'header = "authorization: Bearer %s"\n' "$token" | curl -sf -o /dev/null -K - "http://127.0.0.1:$port/api/stream" && return 0
+    sleep 1
+  done
+  return 1
+}
+
+# GET a GitHub URL; extra arguments go to curl.
+github() {
+  local url=$1
+  shift
+  curl -sfL -H "x-github-api-version: 2022-11-28" "$@" "$url"
+}
+
+release=$(github "https://api.github.com/repos/$REPO/releases/latest" --max-time 30 -H "accept: application/vnd.github+json") ||
+  { echo "GitHub refused the request for the latest release of $REPO." >&2; exit 1; }
+tag=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["tag_name"])' "$release")
+[[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Unexpected release tag: $tag" >&2; exit 1; }
+asset() { python3 -c 'import json, sys; print(next(a["browser_download_url"] for a in json.loads(sys.argv[1])["assets"] if a["name"] == sys.argv[2]))' "$release" "$1"; }
+name=finrod-$tag
+previous=$(readlink "$ROOT/current" 2>/dev/null || true)
+
+# Replace this script and finrod-data-unlock with the copies in the running release, so a release that changes them
+# brings the change.
+# install writes a new file, so the copy that is running now reads on undisturbed.
+update_self() {
+  local self
+  self=$(readlink -f "$0")
+  local unlock=$HOME/.local/bin/finrod-data-unlock
+  [[ ! -e $unlock ]] || cmp -s "$ROOT/current/deploy/data-unlock" "$unlock" || install -m 755 "$ROOT/current/deploy/data-unlock" "$unlock"
+  cmp -s "$ROOT/current/deploy/finrod-update" "$self" || install -m 755 "$ROOT/current/deploy/finrod-update" "$self"
+}
+
+if [[ $previous == "releases/$name" ]]; then
+  echo "Finrod $tag is already installed."
+  use_claude "$ROOT/current"
+  update_self
+  exit 0
+fi
+
+if [[ ! -d $RELEASES/$name ]]; then
+  work=$(mktemp -d "$RELEASES/.download.XXXXXX")
+  trap 'rm -rf "$work"' EXIT
+  github "$(asset "$name.tar.gz")" --max-time 300 -o "$work/$name.tar.gz"
+  github "$(asset "$name.tar.gz.sha256")" --max-time 30 -o "$work/$name.tar.gz.sha256"
+  (cd "$work" && sha256sum --quiet -c "$name.tar.gz.sha256")
+  tar -C "$work" -xzf "$work/$name.tar.gz"
+  mv "$work/$name" "$RELEASES/$name"
+fi
+
+# The gateway is optional and runs from `current` too. Its failure must not stop the core's check or rollback.
+restart_gateway() {
+  systemctl --user is-enabled -q finrod-gateway.service 2>/dev/null || return 0
+  systemctl --user restart finrod-gateway.service || echo "The Matrix gateway did not restart; see journalctl --user -u finrod-gateway.service." >&2
+}
+
+use_claude "$RELEASES/$name"
+ln -sfn "releases/$name" "$ROOT/.current.new" && mv -T "$ROOT/.current.new" "$ROOT/current"
+systemctl --user restart finrod.service
+if healthy; then
+  echo "Finrod $tag is installed and answering."
+  restart_gateway
+  update_self
+else
+  if [[ -z $previous ]]; then
+    echo "Finrod $tag does not answer, and there is no previous release to go back to." >&2
+    exit 1
+  fi
+  use_claude "$ROOT/$previous"
+  ln -sfn "$previous" "$ROOT/.current.new" && mv -T "$ROOT/.current.new" "$ROOT/current"
+  systemctl --user restart finrod.service
+  restart_gateway
+  if healthy; then
+    echo "Finrod $tag did not answer. Went back to $previous." >&2
+  else
+    echo "Finrod $tag did not answer, and $previous does not answer after going back either." >&2
+  fi
+  exit 1
+fi
+
+# Keep the newest releases, plus the one just replaced so a manual rollback stays possible.
+ls -1t "$RELEASES" | grep '^finrod-v' | tail -n +$((KEEP + 1)) | while read -r old; do
+  [[ releases/$old == "$previous" ]] || rm -rf "${RELEASES:?}/$old"
+done

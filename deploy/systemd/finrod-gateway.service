@@ -1,0 +1,14 @@
+[Unit]
+Description=Finrod Matrix gateway
+After=network-online.target finrod.service matrix-synapse.service
+
+[Service]
+WorkingDirectory=%h/.local/share/finrod/current
+EnvironmentFile=%h/.local/share/finrod/gateway.env
+Environment=FINROD_GATEWAY_STATE=%h/.local/share/finrod/gateway
+ExecStart=%h/.local/opt/node/bin/node dist/gateway/main.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=Finrod's encrypted data folder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# pass-cli and claude live in ~/.local/bin, which the user manager's PATH leaves out.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# finrod-data-unlock reads the passphrase from Proton Pass with the agent token, which is sealed to this machine, and
+# starts gocryptfs, which forks into the background once the folder is mounted. The passphrase stays in the runtime
+# folder, in memory, for Finrod's memory file; systemd deletes the folder when this service stops.
+Type=forking
+RuntimeDirectory=finrod
+RuntimeDirectoryMode=0700
+LoadCredentialEncrypted=pass-token:%h/.local/share/finrod/pass-token.cred
+ExecStart=%h/.local/bin/finrod-data-unlock
+ExecStop=/usr/bin/fusermount3 -u %h/.local/share/finrod/data

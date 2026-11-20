@@ -1,0 +1,9 @@
+[Unit]
+Description=Install the latest Finrod release
+After=network-online.target
+
+[Service]
+# claude lives in ~/.local/bin, which the user manager's PATH leaves out.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Type=oneshot
+ExecStart=%h/.local/bin/finrod-update

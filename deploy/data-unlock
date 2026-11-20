@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# finrod-data.service runs this before Finrod starts. It reads the data passphrase from Proton Pass with the service's agent
+# token, mounts the encrypted data folder, and leaves the passphrase for the memory file in the service's runtime
+# folder, which is in memory and is deleted when the service stops. The passphrase is never written to disk.
+set -euo pipefail
+
+ROOT=$HOME/.local/share/finrod
+ITEM=finrod-joao-encryption-key
+
+# A throwaway Proton Pass session in the runtime folder; the server has no keyring, so the session key comes from here.
+export PROTON_PASS_SESSION_DIR=$RUNTIME_DIRECTORY/pass
+PROTON_PASS_ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+export PROTON_PASS_ENCRYPTION_KEY PROTON_PASS_KEY_PROVIDER=env
+export PROTON_PASS_AGENT_REASON="Finrod is starting and unlocks its encrypted chat data"
+PROTON_PASS_PERSONAL_ACCESS_TOKEN=$(cat "$CREDENTIALS_DIRECTORY/pass-token") pass-cli login >/dev/null ||
+  { echo "Proton Pass login with the agent token failed. Renew it and seal it again with data-encrypt." >&2; exit 1; }
+
+# The token sees only the item, shared to it alone, so the item is found through that share, not through the vault.
+share=$(pass-cli share list --output json | python3 -c 'import json, sys; print(next(s["id"] for s in json.load(sys.stdin)["shares"] if s["name"] == sys.argv[1]))' "$ITEM") ||
+  { echo "The agent token has no access to the Proton Pass item $ITEM." >&2; exit 1; }
+umask 077
+pass-cli item view --share-id "$share" --item-title "$ITEM" --field "secret key" | tr -d '\n' > "$RUNTIME_DIRECTORY/passphrase"
+[[ -s $RUNTIME_DIRECTORY/passphrase ]] || { echo "Proton Pass returned no passphrase in $ITEM." >&2; exit 1; }
+pass-cli logout >/dev/null || echo "Proton Pass logout failed; the session expires by itself in 2 hours." >&2
+
+# gocryptfs forks into the background once the folder is mounted; finrod-data.service tracks that process.
+mountpoint -q "$ROOT/data" || gocryptfs -q -passfile "$RUNTIME_DIRECTORY/passphrase" "$ROOT/data.crypt" "$ROOT/data"

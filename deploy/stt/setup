@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Build the speech-to-text environment for Finrod voice notes in ~/.local/share/finrod/stt: a Python venv made inside
+# the image that runs it, and the Whisper model. Safe to run again: an environment that imports and a downloaded model
+# are kept.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+STT=$HOME/.local/share/finrod/stt
+IMAGE=docker.io/library/python:3.12-slim
+MODEL=${FINROD_STT_MODEL:-small}
+mkdir -p "$STT"
+chmod 700 "$STT"
+cp "$here/requirements.txt" "$STT/requirements.txt"
+podman run --rm -v "$STT:/stt" -e HF_HOME=/stt/hf -e MODEL="$MODEL" "$IMAGE" sh -euc '
+  if ! /stt/venv/bin/python -c "import faster_whisper, av" 2>/dev/null || ! cmp -s /stt/requirements.txt /stt/venv/requirements.txt; then
+    rm -rf /stt/venv
+    python -m venv /stt/venv
+    /stt/venv/bin/pip install --quiet --no-cache-dir -r /stt/requirements.txt
+    cp /stt/requirements.txt /stt/venv/requirements.txt
+  fi
+  /stt/venv/bin/python -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ[\"MODEL\"], device=\"cpu\", compute_type=\"int8\")"
+'
+echo "Speech-to-text is ready in $STT (model $MODEL)."

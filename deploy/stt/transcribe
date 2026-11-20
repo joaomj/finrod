@@ -1,0 +1,9 @@
+#!/bin/sh
+# FINROD_TRANSCRIBE_COMMAND: transcribe.py with the environment that deploy/stt/setup built. The container has no
+# network and no log, because its output is what the user said. Finrod's directory is mounted read-only at its own
+# path, so the audio path that Finrod passes stays valid.
+here=$(cd "$(dirname "$0")" && pwd -P)
+ROOT=$HOME/.local/share/finrod
+exec podman run --rm --log-driver none --network none -v "$ROOT/stt:/stt:ro" -v "$ROOT:$ROOT:ro" \
+  -e HF_HOME=/stt/hf -e HF_HUB_OFFLINE=1 ${FINROD_STT_MODEL:+-e FINROD_STT_MODEL} \
+  docker.io/library/python:3.12-slim /stt/venv/bin/python "$here/transcribe.py" "$@"

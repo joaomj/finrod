@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Set up encrypted chat data on the server, once: seal the Proton Pass agent token to this machine, then move Finrod's
+# data folder into a gocryptfs folder whose passphrase is in Proton Pass. Paste the token at the prompt; it is not
+# shown. Run again with a renewed token to seal the new one; data already encrypted is left as it is.
+#
+# Needs gocryptfs (sudo apt install gocryptfs), pass-cli, and the finrod.service and finrod-data.service of v0.7.0 or
+# later.
+set -euo pipefail
+
+ROOT=$HOME/.local/share/finrod
+ITEM=finrod-joao-encryption-key
+
+for tool in gocryptfs pass-cli systemd-creds; do
+  command -v "$tool" >/dev/null || { echo "$tool is not installed." >&2; exit 1; }
+done
+units=$HOME/.config/systemd/user
+grep -q '^BindsTo=finrod-data.service' "$units/finrod.service" && [[ -f $units/finrod-data.service ]] || {
+  echo "The units do not unlock the data. Copy finrod.service and finrod-data.service from v0.7.0 or later first." >&2
+  exit 1
+}
+
+if [[ -f $ROOT/pass-token.cred ]]; then
+  read -rsp "Proton Pass agent token (Enter keeps the sealed one): " token
+else
+  read -rsp "Proton Pass agent token: " token
+fi
+echo
+if [[ -n $token ]]; then
+  printf %s "$token" | systemd-creds encrypt --user --name=pass-token - "$ROOT/pass-token.cred.new"
+  chmod 600 "$ROOT/pass-token.cred.new"
+  mv "$ROOT/pass-token.cred.new" "$ROOT/pass-token.cred"
+elif [[ -f $ROOT/pass-token.cred ]]; then
+  token=$(systemd-creds decrypt --user --name=pass-token "$ROOT/pass-token.cred" -)
+else
+  echo "No token given. Nothing changed." >&2
+  exit 1
+fi
+here=$(cd "$(dirname "$0")" && pwd)
+install -m 755 "$here/data-unlock" "$HOME/.local/bin/finrod-data-unlock"
+systemctl --user daemon-reload
+
+if [[ ! -d $ROOT/data.crypt ]]; then
+  echo "Encrypting $ROOT/data. Finrod stops until it is done."
+  systemctl --user stop finrod.service finrod-data.service
+  work=$(mktemp -d "/run/user/$(id -u)/finrod-encrypt.XXXXXX")
+  # A failed run leaves no staging copy behind, so the next run starts clean.
+  trap 'mountpoint -q "$work/mnt" && fusermount3 -u "$work/mnt"; rm -rf "$work" "$ROOT/data.crypt.new"' EXIT
+  rm -rf "$ROOT/data.crypt.new"
+  mkdir "$work/mnt"
+  mkdir -p -m 700 "$ROOT/data"
+  (
+    export PROTON_PASS_SESSION_DIR=$work/pass PROTON_PASS_KEY_PROVIDER=env
+    PROTON_PASS_ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+    export PROTON_PASS_ENCRYPTION_KEY PROTON_PASS_AGENT_REASON="Encrypting Finrod's chat data for the first time"
+    PROTON_PASS_PERSONAL_ACCESS_TOKEN=$token pass-cli login >/dev/null
+    # The token sees only the item, shared to it alone, so the item is found through that share, not through the vault.
+    share=$(pass-cli share list --output json | python3 -c 'import json, sys; print(next(s["id"] for s in json.load(sys.stdin)["shares"] if s["name"] == sys.argv[1]))' "$ITEM") ||
+      { echo "The agent token has no access to the Proton Pass item $ITEM." >&2; exit 1; }
+    umask 077
+    pass-cli item view --share-id "$share" --item-title "$ITEM" --field "secret key" | tr -d '\n' > "$work/passphrase"
+    pass-cli logout >/dev/null || true
+  )
+  unset token
+  [[ -s $work/passphrase ]] || { echo "Proton Pass returned no passphrase in $ITEM. Finrod stays stopped." >&2; exit 1; }
+  # memories.enc is encrypted with the passphrase that v0.6.0 sealed; from now on Finrod opens it with this one.
+  if [[ -f $ROOT/memory-key.cred ]] && ! systemd-creds decrypt --user --name=memory-key "$ROOT/memory-key.cred" - | cmp -s - "$work/passphrase"; then
+    echo "The passphrase in $ITEM differs from the one that encrypts the memories (memory-key.cred). Put the same passphrase in $ITEM. Nothing changed; Finrod stays stopped." >&2
+    exit 1
+  fi
+  mkdir -m 700 "$ROOT/data.crypt.new"
+  gocryptfs -q -init -passfile "$work/passphrase" "$ROOT/data.crypt.new"
+  gocryptfs -q -passfile "$work/passphrase" "$ROOT/data.crypt.new" "$work/mnt"
+  cp -a "$ROOT/data/." "$work/mnt/"
+  diff -r "$ROOT/data" "$work/mnt" >/dev/null || { echo "The encrypted copy differs from the data. Nothing changed; Finrod stays stopped." >&2; exit 1; }
+  fusermount3 -u "$work/mnt"
+  mv "$ROOT/data.crypt.new" "$ROOT/data.crypt"
+  mv "$ROOT/data" "$ROOT/data.plain"
+  mkdir -m 700 "$ROOT/data"
+fi
+unset token
+
+if [[ ! -e $ROOT/current ]]; then
+  echo "Encrypted data is set up. No release is installed yet; finrod-update starts Finrod on it."
+  exit 0
+fi
+systemctl --user restart finrod-data.service
+systemctl --user start finrod.service
+sleep 5
+systemctl --user is-active -q finrod.service && mountpoint -q "$ROOT/data" ||
+  { echo "Finrod did not start with the encrypted data; see journalctl --user -u finrod-data.service -u finrod.service." >&2; exit 1; }
+echo "Finrod runs on the encrypted data in $ROOT/data.crypt."
+[[ -d $ROOT/data.plain ]] && echo "The plain copy is in $ROOT/data.plain. Delete it when Finrod answers as before: rm -rf $ROOT/data.plain"

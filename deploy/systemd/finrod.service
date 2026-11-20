@@ -1,0 +1,17 @@
+[Unit]
+Description=Finrod chat server
+# Finrod's data is the mount that finrod-data.service holds; Finrod stops with it.
+BindsTo=finrod-data.service
+After=finrod-data.service
+
+[Service]
+WorkingDirectory=%h/.local/share/finrod/current
+EnvironmentFile=%h/.local/share/finrod/finrod.env
+Environment=FINROD_DATA_DIR=%h/.local/share/finrod/data
+Environment=FINROD_MEMORY_KEY_FILE=%t/finrod/passphrase
+ExecStart=%h/.local/opt/node/bin/node dist/server/main.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

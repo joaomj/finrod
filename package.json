@@ -1,0 +1,31 @@
+{
+  "name": "finrod",
+  "version": "0.10.2",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "check": "tsc --noEmit -p server && tsc --noEmit -p test && tsc --noEmit -p gateway",
+    "build": "npm run check && node scripts/build.mjs",
+    "start": "node dist/server/main.js",
+    "test": "npm run build && node --test --test-force-exit test/*.test.ts"
+  },
+  "dependencies": {
+    "@earendil-works/chord": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-durable": "1.4.0",
+    "@earendil-works/pi-mcp": "1.4.0",
+    "markdown-it": "15.0.3",
+    "matrix-js-sdk": "45.0.0",
+    "node-indexeddb": "6.0.3",
+    "pi-claude-directsdk": "1.0.2"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "14.2.0",
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""One-off import of a ChatGPT export into a Finrod profile.
+
+Usage: chatgpt-import <export.zip> <profile dir>
+
+Writes <profile>/chatgpt/chatgpt.sqlite and copies the user's audio recordings to <profile>/chatgpt/audio/. Then, if
+FINROD_TRANSCRIBE_COMMAND is set, transcribes each recording that has no transcript yet and appends the transcript to
+its message. A second run keeps the database it finds and only transcribes what is still missing.
+"""
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import zipfile
+
+SCHEMA = """
+CREATE TABLE conversations (id TEXT PRIMARY KEY, title TEXT NOT NULL, created INTEGER NOT NULL);
+-- One row per message on the conversation's current path; id is the number that sources cite as #c<id>.
+-- voice: 1 when the text is ChatGPT's own transcript of voice mode. text includes the transcripts of its audio.
+CREATE TABLE messages (id INTEGER PRIMARY KEY, conversation TEXT NOT NULL REFERENCES conversations, role TEXT NOT NULL,
+  at INTEGER NOT NULL, voice INTEGER NOT NULL, text TEXT NOT NULL);
+-- A recording the user sent; file is relative to the chatgpt folder; transcript is NULL until transcribed.
+CREATE TABLE audio (file TEXT PRIMARY KEY, message INTEGER NOT NULL REFERENCES messages, seconds REAL, transcript TEXT);
+"""
+
+
+def current_path(conversation):
+    """The messages the user saw last: from the current node back to the root, without abandoned edits."""
+    nodes, node_id = [], conversation["current_node"]
+    while node_id:
+        node = conversation["mapping"][node_id]
+        nodes.append(node)
+        node_id = node.get("parent")
+    return [node["message"] for node in reversed(nodes) if node.get("message")]
+
+
+def message_content(message, names, missing):
+    """The message's text, whether it is a voice-mode transcript, and the zip entries of its audio. Audio the export left
+    out goes to `missing`."""
+    content = message["content"]
+    if content["content_type"] not in ("text", "multimodal_text"):  # thoughts and reasoning recaps
+        return "", False, []
+    texts, voice, audio = [], False, []
+    for part in content.get("parts") or []:  # in the order they were sent
+        if isinstance(part, str):
+            texts.append(part)
+        elif part.get("content_type") == "audio_transcription":
+            texts.append(part["text"].strip())
+            voice = True
+        elif part.get("content_type") == "audio_asset_pointer":
+            file_id = part["asset_pointer"].split("://", 1)[1]
+            entry = f"{file_id}.dat"
+            if entry not in names:
+                raise SystemExit(f"Audio {entry} is missing from the export.")
+            audio.append((entry, part["format"], part["metadata"]["end"]))
+    for attachment in message.get("metadata", {}).get("attachments") or []:
+        entry = f"{attachment['id']}.dat"
+        # A recording sent in the message is also listed as its attachment.
+        if attachment.get("mime_type", "").startswith("audio/") and entry not in (a[0] for a in audio):
+            if entry not in names:
+                missing.append(attachment["name"])
+                continue
+            audio.append((entry, attachment["name"].rsplit(".", 1)[-1].lower(), None))
+    return "\n".join(text for text in texts if text.strip()), voice, audio
+
+
+def build(export, folder):
+    path = f"{folder}/chatgpt.sqlite"
+    partial = f"{path}.partial"
+    if os.path.exists(partial):
+        os.remove(partial)
+    os.makedirs(f"{folder}/audio", exist_ok=True)
+    db = sqlite3.connect(partial)
+    db.executescript(SCHEMA)
+    with zipfile.ZipFile(export) as archive:
+        names = set(archive.namelist())
+        conversations = []
+        for name in sorted(n for n in names if n.startswith("conversations-") and n.endswith(".json")):
+            conversations += json.loads(archive.read(name))
+        conversations.sort(key=lambda c: c["create_time"])
+        seen, count, missing = set(), 0, []
+        for conversation in conversations:
+            created = round(conversation["create_time"] * 1000)
+            db.execute("INSERT INTO conversations VALUES (?, ?, ?)", (conversation["id"], conversation["title"] or "", created))
+            for message in current_path(conversation):
+                role = message["author"]["role"]
+                # A "Branch ·" conversation repeats its parent's messages under the same IDs.
+                if role not in ("user", "assistant") or message["id"] in seen:
+                    continue
+                seen.add(message["id"])
+                text, voice, audio = message_content(message, names, missing)
+                if not text and not audio:
+                    continue
+                at = round((message.get("create_time") or conversation["create_time"]) * 1000)
+                cursor = db.execute("INSERT INTO messages (conversation, role, at, voice, text) VALUES (?, ?, ?, ?, ?)", (conversation["id"], role, at, int(voice), text))
+                count += 1
+                for entry, extension, seconds in audio:
+                    file = f"audio/{entry.removesuffix('.dat')}.{extension}"
+                    with archive.open(entry) as source, open(f"{folder}/{file}", "wb") as target:
+                        shutil.copyfileobj(source, target)
+                    db.execute("INSERT INTO audio VALUES (?, ?, ?, NULL)", (file, cursor.lastrowid, seconds))
+    db.commit()
+    db.close()
+    os.rename(partial, path)
+    print(f"Imported {len(conversations)} conversations, {count} messages.")
+    if missing:
+        print(f"The export left out {len(missing)} audio attachments: {', '.join(missing)}")
+
+
+def transcribe(folder, command):
+    db = sqlite3.connect(f"{folder}/chatgpt.sqlite")
+    pending = db.execute("SELECT file, message FROM audio WHERE transcript IS NULL ORDER BY rowid").fetchall()
+    for number, (file, message) in enumerate(pending, 1):
+        print(f"Transcribing {number}/{len(pending)}: {file}")
+        result = subprocess.run([command, os.path.abspath(f"{folder}/{file}")], capture_output=True, text=True)
+        if result.returncode != 0:
+            raise SystemExit(f"Transcribing {file} failed with exit code {result.returncode}: {result.stderr.strip()[-2000:]}")
+        transcript = " ".join(segment["text"] for segment in json.loads(result.stdout)["segments"])
+        with db:
+            db.execute("UPDATE audio SET transcript = ? WHERE file = ?", (transcript, file))
+            db.execute("UPDATE messages SET text = trim(text || char(10) || ?, char(10)) WHERE id = ?", (transcript, message))
+    db.close()
+    print(f"Transcribed {len(pending)} recordings.")
+
+
+def main():
+    if len(sys.argv) != 3:
+        raise SystemExit(__doc__)
+    export, profile = sys.argv[1], sys.argv[2]
+    if not os.path.isdir(profile):
+        raise SystemExit(f"Profile folder {profile} does not exist.")
+    folder = f"{profile}/chatgpt"
+    if os.path.exists(f"{folder}/chatgpt.sqlite"):
+        print(f"{folder}/chatgpt.sqlite exists; keeping it.")
+    else:
+        build(export, folder)
+    command = os.environ.get("FINROD_TRANSCRIBE_COMMAND")
+    if command:
+        transcribe(folder, command)
+    else:
+        print("FINROD_TRANSCRIBE_COMMAND is not set; the recordings are not transcribed.")
+
+
+if __name__ == "__main__":
+    main()

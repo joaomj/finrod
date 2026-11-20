@@ -1,0 +1,22 @@
+# Finrod dependencies, credentials, and runtime state
+node_modules/
+dist/
+.env
+.env.*
+*.sqlite
+*.sqlite-*
+.finrod/
+
+# Private source archives and local import outputs
+/data/
+chatgpt-*.zip
+
+# Background job logs
+.pi-bgrun/
+
+# Reference clones (ideas only, never built or committed)
+inspiration/*
+!inspiration/.gitkeep
+
+# Release archives built by scripts/package.sh
+/release/
