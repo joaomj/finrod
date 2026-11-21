@@ -4,6 +4,13 @@ This file records user-facing changes.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-21
+
+### Added
+
+- Every OpenRouter request demands zero data retention and no data collection, whatever the account settings are.
+- Canary tokens: set `FINROD_CANARY_FILE` to a file with tokens from canarytokens.org, and every prompt carries them, so their alert reports a leaked prompt. See Canary in `docs/OPERATIONS.md`.
+
 ## [0.10.2] - 2026-11-20
 
 ### Changed
