@@ -100,6 +100,10 @@ These are in `~/.local/share/finrod/` on the mini PC, not in Proton Pass:
   `systemd-creds`.
 - `finrod.env`: `OPENROUTER_API_KEY`, `FINROD_GATEWAY_TOKEN` (the bearer
   token for `/api/*`), `FINROD_TRANSCRIBE_COMMAND`.
+- `canary` and `canary-manage.json`: the canary tokens that `FINROD_CANARY_FILE`
+  in `finrod.env` names, and their management links on canarytokens.org.
+  Never print the tokens: an agent's model provider would see them, and a
+  leak there would look like a leak from Finrod.
 - `gateway.env` and `gateway/login.json`: the gateway's Matrix login and
   device keys.
 
