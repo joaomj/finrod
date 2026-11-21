@@ -2,6 +2,7 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT as context } from "@earendil-works/chord/context";
 import type { ConversationId, Extension } from "@earendil-works/pi-durable";
+import { withCanary, type Canary } from "./canary.js";
 import type { ChatMessage, Threads } from "./chat.js";
 import { importedLine, type ChatGPT } from "./chatgpt.js";
 import { legacyMemories, retireLegacyMemories } from "./memories.js";
@@ -40,6 +41,7 @@ type DreamingOptions = {
   readonly profileDir: string;
   readonly passphrase: string;
   readonly chatgpt: ChatGPT | undefined;
+  readonly canary: Canary | undefined;
 };
 
 /**
@@ -100,7 +102,7 @@ export class Dreaming {
       ...(fresh.length ? [`Conversation since the last update:\n${fresh.map(line).join("\n")}`] : []),
       ...(imported.length ? [`What the user wrote in ChatGPT before Finrod, oldest first:\n${imported.map((message) => importedLine(message)).join("\n")}`] : []),
     ].join("\n\n");
-    const conversation = await threads.harness.createConversation({ ownership: { kind: "ownerless" }, agent: { model, instructions: schemaPrompt.trim(), extensions } }, context);
+    const conversation = await threads.harness.createConversation({ ownership: { kind: "ownerless" }, agent: { model, instructions: withCanary(schemaPrompt.trim(), this.options.canary), extensions } }, context);
     const running = { conversation: conversation.id, upTo: fresh.at(-1)?.id ?? state.after, input, legacy: legacy !== undefined, cleanup, ...(imported.length ? { chatgptUpTo: imported.at(-1)!.id } : {}) };
     await this.save({ ...state, running });
     await this.finish(state, running);

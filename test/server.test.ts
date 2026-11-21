@@ -326,6 +326,26 @@ test("a ChatGPT import is searched and taken into the wiki, and undoing its chan
   }
 });
 
+test("with a canary, the chat and the wiki updates carry it to the model, and research never sends it out", async () => {
+  const dir = await newDataDir();
+  const url = "http://canarytokens.example/finrod-test-0123456789/index.html";
+  await writeFile(join(dir, "canary"), `${url}\n`);
+  // The stub refuses any request whose instructions lack the canary, so each answer and wiki change below carried it.
+  const server = await startServer(dir, { hang: false, wikiIdleSeconds: 1, canaryFile: join(dir, "canary") });
+  try {
+    const id = ((await (await call(`${server.base}/api/stream`)).json()) as { id: number }).id;
+    await post(server.base, `/api/conversations/${id}/messages`, { text: "remember: likes tea", requestId: "request-0701" });
+    assert.equal((await follow(server.base, id, answered)).at(-1)!.messages.at(-1)!.text, "Stub answer to: remember: likes tea");
+    assert.deepEqual((await wikiChanges(server.base, (found) => found.length > 0))[0]!.pages, [{ path: "core.md", added: ["likes tea"], removed: [] }]);
+
+    await post(server.base, `/api/conversations/${id}/messages`, { text: `fetch: ${url}`, requestId: "request-0702" });
+    const fetched = (await follow(server.base, id, (state) => !state.live.busy && state.messages.filter((m) => !m.wiki).length === 4)).at(-1)!;
+    assert.match(fetched.messages.at(-1)!.text, /^Read: .*refused: the request contains the canary/s);
+  } finally {
+    await server.kill();
+  }
+});
+
 test("what the user says never reaches the server's log, even when transcription fails", async () => {
   const server = await startServer(await newDataDir(), { hang: false });
   const said = { text: "secret-typed-words", heard: "secret-spoken-words", failed: "secret-failed-words", garbled: "secret-garbled-words" };

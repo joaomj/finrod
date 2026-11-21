@@ -181,7 +181,12 @@ the transcription container has no log. `test/server.test.ts` checks this.
   conversation.
   The build bundles pi-claude-directsdk because it ships TypeScript source.
   Startup fails if the model is not in the provider's catalog.
-- Zero data retention is set in the OpenRouter account, not in Finrod.
+- Every OpenRouter request demands zero data retention and no data
+  collection (`provider.zdr`, `provider.data_collection`), in addition to
+  the account's privacy settings.
+- With `FINROD_CANARY_FILE`, the chat's and the wiki updates' instructions
+  end with canary tokens (`server/canary.ts`), so a token's alert reports a
+  leaked prompt. Web research refuses requests that contain the canary.
 - Research uses Exa MCP's free tier at
   `https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa`. Each tool call
   opens a new connection. A free-tier limit message counts as a failed tool

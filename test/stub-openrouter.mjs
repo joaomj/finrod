@@ -8,7 +8,12 @@
 // "note <page>: X" writes X to that page, and "unsourced <page>: X" writes X without its source, which Finrod must
 // refuse. Memories from before the wiki go to the core page. A cleanup removes the core facts that start with "stale:".
 // FINROD_STUB_HANG=1 makes an answer stop after its first words and never finish, as when the process dies mid-answer.
+// "fetch: <url>" makes it call web_fetch. A request that does not demand zero data retention and no data collection is
+// refused, and so is one without the canary in its instructions when FINROD_CANARY_FILE is set.
+import { readFileSync } from "node:fs";
+
 const encoder = new TextEncoder();
+const canary = process.env.FINROD_CANARY_FILE ? readFileSync(process.env.FINROD_CANARY_FILE, "utf8").trim() : undefined;
 const text = (content) => (typeof content === "string" ? content : content.map((part) => part.text ?? "").join(" "));
 
 /** The tool calls of a wiki update, from its input. */
@@ -39,7 +44,8 @@ function wikiEdits(input, model) {
 
 /** The tool call a chat message asks for, if any. */
 function chatTool(asked) {
-  const [, verb, rest] = /^(read|search|around|chatgpt): (.+)$/.exec(asked) ?? [];
+  const [, verb, rest] = /^(read|search|around|chatgpt|fetch): (.+)$/.exec(asked) ?? [];
+  if (verb === "fetch") return [["web_fetch", { urls: [rest] }]];
   if (verb === "read") return [["read_page", { path: rest }]];
   if (verb === "search") return [["search", { query: rest }]];
   if (verb === "around") return [["read_messages", { id: Number(rest), count: 1 }]];
@@ -57,6 +63,9 @@ globalThis.fetch = async (input, init) => {
   const chunk = (delta, finish = null) =>
     `data: ${JSON.stringify({ id: "stub", object: "chat.completion.chunk", created: 0, model: request.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
   const system = String(request.messages.find((message) => message.role === "system")?.content ?? "");
+  const refuse = (reason) => new Response(JSON.stringify({ error: { code: 400, message: `Test stub: ${reason}` } }), { status: 400, headers: { "content-type": "application/json" } });
+  if (request.provider?.zdr !== true || request.provider?.data_collection !== "deny") return refuse("the request allows data retention");
+  if (canary && !system.includes(canary)) return refuse("the instructions lack the canary");
   const known = (system.split("Core page:\n")[1] ?? "").split("\n\n")[0].split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2).replace(/ \(source: [^)]+\)$/, ""));
   const last = request.messages.at(-1);
   const updating = request.tools?.some((tool) => tool.function.name === "write_page");

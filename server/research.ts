@@ -1,12 +1,15 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import { McpClient, StreamableHttpTransport, toLlmContent, type CallToolResult } from "@earendil-works/pi-mcp";
+import { carriesCanary, type Canary } from "./canary.js";
 
 const EXA_URL = "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa";
 const REQUEST_TIMEOUT_MS = 30_000;
 
 /** Call one Exa MCP tool on the rate-limited free tier, over a fresh connection so no session can go stale. */
-async function callExa(name: string, args: Record<string, unknown>, signal: AbortSignal | undefined) {
+async function callExa(name: string, args: Record<string, unknown>, signal: AbortSignal | undefined, canary: Canary | undefined) {
+  // A canary that Finrod itself sends out would report a leak that did not happen.
+  if (carriesCanary(args, canary)) throw new Error(`Exa ${name} refused: the request contains the canary, which must never leave Finrod.`);
   const client = new McpClient({ name: "finrod", version: "0.3.0", requestTimeoutMs: REQUEST_TIMEOUT_MS });
   let result: CallToolResult;
   try {
@@ -28,8 +31,8 @@ async function callExa(name: string, args: Record<string, unknown>, signal: Abor
   return content;
 }
 
-/** Web search and page reading through Exa's free tier. */
-export function research() {
+/** Web search and page reading through Exa's free tier. No request carries the canary. */
+export function research(canary: Canary | undefined) {
   const webSearch = defineTool({
     name: "web_search",
     description:
@@ -41,7 +44,7 @@ export function research() {
     }),
     replay: "safe",
     execute: async (args, _api, context) => ({
-      output: await callExa("web_search_exa", { ...args, numResults: args.numResults ?? 5 }, context.abortSignal),
+      output: await callExa("web_search_exa", { ...args, numResults: args.numResults ?? 5 }, context.abortSignal, canary),
     }),
   });
 
@@ -53,7 +56,7 @@ export function research() {
     }),
     replay: "safe",
     execute: async (args, _api, context) => ({
-      output: await callExa("web_fetch_exa", { urls: args.urls, maxCharacters: 6000 }, context.abortSignal),
+      output: await callExa("web_fetch_exa", { urls: args.urls, maxCharacters: 6000 }, context.abortSignal, canary),
     }),
   });
 

@@ -17,6 +17,7 @@ import {
   type Registry,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
+import { withCanary, type Canary } from "./canary.js";
 import type { Config } from "./config.js";
 import { ChatGPT } from "./chatgpt.js";
 import { clock } from "./clock.js";
@@ -29,11 +30,32 @@ import { Wiki, wikiTools, type PageChange } from "./wiki.js";
 import finrodPrompt from "./prompts/finrod.md";
 import wikiPrompt from "./prompts/wiki.md";
 
-/** The model's instructions: Finrod's rules, the core page, and the index of the other pages. */
-async function instructionsFor(wiki: Wiki): Promise<string> {
+/** The model's instructions: Finrod's rules, the core page, the index of the other pages, and the canary. */
+async function instructionsFor(wiki: Wiki, canary: Canary | undefined): Promise<string> {
   const { core, index } = await wiki.overview();
   const notes = wikiPrompt.trim().replace("{{core}}", () => core || "(empty)").replace("{{index}}", () => index || "(empty)");
-  return `${finrodPrompt.trim()}\n\n${notes}`;
+  return withCanary(`${finrodPrompt.trim()}\n\n${notes}`, canary);
+}
+
+/**
+ * OpenRouter, with every request routed only to endpoints that retain no prompts and do not collect data. The account's
+ * privacy settings apply as well; these hold even if the account's are loosened.
+ */
+function privateOpenRouter(): ReturnType<typeof openrouterProvider> {
+  const openrouter = openrouterProvider();
+  const restrict = <T extends { onPayload?: (payload: unknown, model: never) => unknown }>(options: T | undefined): T =>
+    ({
+      ...options,
+      onPayload: async (payload: unknown, model: never) => {
+        const body = ((await options?.onPayload?.(payload, model)) ?? payload) as { provider?: object };
+        return { ...body, provider: { ...body.provider, zdr: true, data_collection: "deny" } };
+      },
+    }) as T;
+  return {
+    ...openrouter,
+    stream: (model, context, options) => openrouter.stream(model, context, restrict(options)),
+    streamSimple: (model, context, options) => openrouter.streamSimple(model, context, restrict(options)),
+  };
 }
 
 /** Finrod's own index of conversations, newest first. The newest one is the user's stream. */
@@ -70,7 +92,7 @@ type ThreadsOpen = {
   readonly model: { provider: string; modelId: string };
   readonly storage: Awaited<ReturnType<typeof openNodeSqliteStorage>>;
   readonly settings: HarnessSettings;
-  readonly wiki: Wiki;
+  readonly instructions: () => Promise<string>;
 };
 
 /** The conversations of the profile's SQLite file. */
@@ -78,7 +100,7 @@ export class Threads {
   private constructor(
     readonly harness: Harness,
     private readonly model: { provider: string; modelId: string },
-    private readonly wiki: Wiki,
+    private readonly instructions: () => Promise<string>,
   ) {}
 
   private creating: Promise<number> | undefined;
@@ -86,7 +108,7 @@ export class Threads {
   static async open(open: ThreadsOpen): Promise<Threads> {
     const harness = await Harness.open(open.storage, { models: open.models, registry: open.registry, settings: open.settings }, context);
     harness.resume();
-    return new Threads(harness, open.model, open.wiki);
+    return new Threads(harness, open.model, open.instructions);
   }
 
   /** Settles when the store closes; `failed` means the process must restart. */
@@ -109,7 +131,7 @@ export class Threads {
   }
 
   private async create(): Promise<number> {
-    const instructions = await instructionsFor(this.wiki);
+    const instructions = await this.instructions();
     const conversation = await this.harness.createConversation(
       {
         ownership: { kind: "ownerless" },
@@ -131,7 +153,7 @@ export class Threads {
   async send(id: number, text: string, requestId: string, voice?: number): Promise<boolean> {
     const conversation = await this.harness.conversation(id as ConversationId, context);
     if (!conversation) return false;
-    const instructions = await instructionsFor(this.wiki);
+    const instructions = await this.instructions();
     const agent = await conversation.agent(context);
     const sameModel = agent.model?.provider === this.model.provider && agent.model.modelId === this.model.modelId;
     if (!sameModel || agent.instructions !== instructions) {
@@ -213,7 +235,7 @@ export class Chat {
   static async open(config: Config): Promise<Chat> {
     const models = createModels();
     models.setProvider(
-      config.provider === "openrouter" ? openrouterProvider() : createDirectSdkProvider((message) => console.error(message)),
+      config.provider === "openrouter" ? privateOpenRouter() : createDirectSdkProvider((message) => console.error(message)),
     );
     const refresh = await models.refresh({ providers: [config.provider] });
     for (const [setting, id] of [["FINROD_MODEL", config.model], ["FINROD_WIKI_MODEL", config.wikiModel]] as const) {
@@ -237,7 +259,7 @@ export class Chat {
     const chatgpt = ChatGPT.open(join(dir, "chatgpt", "chatgpt.sqlite"));
     const search = new Search(join(dir, "search.sqlite"), wiki, async () => (await threads!.activity(await threads!.stream())).messages, chatgpt);
     const recalling = searching(search);
-    const chatting = [research(), recalling, reading, clock()];
+    const chatting = [research(config.canary), recalling, reading, clock()];
     for (const extension of [...chatting, editing]) registry.install(extension);
     const model = { provider: config.provider, modelId: config.model };
     threads = await Threads.open({
@@ -247,9 +269,9 @@ export class Chat {
       storage: await openNodeSqliteStorage(join(dir, "finrod.sqlite")),
       // Only wiki updates may edit the wiki; the chat reads it.
       settings: { extensions: chatting },
-      wiki,
+      instructions: () => instructionsFor(wiki, config.canary),
     });
-    new Dreaming({ threads, wiki, model: { provider: config.provider, modelId: config.wikiModel }, extensions: [recalling, reading, editing], idleMs: config.dreamIdleMs, cleanupMs: config.cleanupMs, profileDir: dir, passphrase: config.memoryPassphrase, chatgpt }).start();
+    new Dreaming({ threads, wiki, canary: config.canary, model: { provider: config.provider, modelId: config.wikiModel }, extensions: [recalling, reading, editing], idleMs: config.dreamIdleMs, cleanupMs: config.cleanupMs, profileDir: dir, passphrase: config.memoryPassphrase, chatgpt }).start();
     return new Chat(threads, wiki, voice, join(dir, "gateway-cursor.json"));
   }
 

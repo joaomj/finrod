@@ -33,6 +33,7 @@ is wrong. The error names the setting and how to fix it.
 | `FINROD_PROVIDER` | No | `openrouter` | `openrouter`, or `claude-directsdk` to answer through the Claude Code login on the server; see [Claude subscription](#claude-subscription) |
 | `FINROD_GATEWAY_TOKEN` | Yes | None | Secret the gateway sends with every request, at least 32 characters. Create it with `openssl rand -hex 32` |
 | `FINROD_TRANSCRIBE_COMMAND` | For voice | None | Executable that gets `AUDIO` and prints `{"duration", "segments": [{"start", "end", "text"}]}`. On the server: `/home/joao/.local/share/finrod/current/deploy/stt/transcribe`; see [Voice](#voice) |
+| `FINROD_CANARY_FILE` | No | None | File with canary tokens, such as a Canarytokens URL or AWS key. Finrod adds its text to every model's instructions, so an alert from a token reports a leaked prompt; see [Canary](#canary) |
 | `FINROD_MEMORY_KEY_FILE` | Yes | None | File with the passphrase, at least 16 characters, of `memories.enc`, the memories approved before the wiki. Finrod moves them into the wiki once and renames the file `memories.enc.imported`. `finrod.service` sets it; see [Encrypted data](#encrypted-data) |
 | `FINROD_WIKI_MODEL` | No | `opus` with `claude-directsdk`, otherwise `FINROD_MODEL` | Model ID, from the same provider, that updates the wiki. Updates run after the conversation, so a slower, stronger model costs no wait |
 | `FINROD_WIKI_CLEANUP_SECONDS` | No | `604800` (7 days) | How often Finrod checks the whole wiki against its sources, merges, and prunes. A cleanup also waits for a quiet chat |
@@ -44,8 +45,31 @@ is wrong. The error names the setting and how to fix it.
 | `CLAUDE_DIRECTSDK_COMMAND` | With `claude-directsdk` on the server | `claude` on `PATH` | Path of the Claude Code executable. The user services do not have `~/.local/bin` on `PATH` |
 | `DISABLE_AUTOUPDATER` | With `claude-directsdk` | None | `1` keeps Claude Code at the installed version; see [Claude subscription](#claude-subscription) |
 
-Zero data retention is an OpenRouter account setting. Enable it there before
-use. Finrod does not set it per request. Web research uses Exa's free tier.
+Every OpenRouter request sets `provider.zdr: true` and
+`provider.data_collection: "deny"`, so OpenRouter routes it only to endpoints
+that it lists as retaining no prompts. Also set the account's privacy settings to
+Zero Data Retention only: otherwise OpenRouter can still route to Safety
+Retention endpoints, which keep prompts for abuse checks. These flags bind
+OpenRouter's choice of endpoint only. An endpoint can still forward the prompt
+to another company; the canary is how you find out.
+
+### Canary
+
+A canary token is a secret that exists only in Finrod's prompts. Anyone who
+uses it has read a prompt, so its alert reports a leak at a model provider or
+at a hop on the way.
+
+1. Create one or more tokens at `https://canarytokens.org`, for example a web
+   bug URL and an AWS API key, with an alert email that you read.
+2. Write them to a file on the server, such as
+   `~/.local/share/finrod/canary`, with mode 0600. Each token must have at
+   least 16 characters and a digit.
+3. Add `FINROD_CANARY_FILE=` with the file's full path to `finrod.env`, and
+   restart Finrod.
+
+Finrod refuses web research whose request contains part of the canary, so
+Finrod itself never fires an alert. Treat an alert as a leak: note the time,
+check which provider and model served Finrod then, and replace the token. Web research uses Exa's free tier.
 
 ## Layout on the server
 

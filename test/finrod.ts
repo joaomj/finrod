@@ -44,7 +44,7 @@ export async function freePort(): Promise<number> {
  * Start the built server on `dataDir` with the OpenRouter stub preloaded, or, with `live`, on the real Claude models
  * through the Claude Code login on this machine. The wiki waits an hour unless told otherwise.
  */
-export async function startServer(dataDir: string, options: { hang: boolean; live?: boolean; model?: string; wikiModel?: string; wikiIdleSeconds?: number; wikiCleanupSeconds?: number; port?: number }) {
+export async function startServer(dataDir: string, options: { hang: boolean; live?: boolean; model?: string; wikiModel?: string; wikiIdleSeconds?: number; wikiCleanupSeconds?: number; port?: number; canaryFile?: string }) {
   const port = options.port ?? (await freePort());
   const provider = options.live
     ? { FINROD_PROVIDER: "claude-directsdk", CLAUDE_DIRECTSDK_COMMAND: join(homedir(), ".local", "bin", "claude"), DISABLE_AUTOUPDATER: "1" }
@@ -57,6 +57,7 @@ export async function startServer(dataDir: string, options: { hang: boolean; liv
       FINROD_DATA_DIR: dataDir,
       ...(options.model ? { FINROD_MODEL: options.model } : {}),
       ...(options.wikiModel ? { FINROD_WIKI_MODEL: options.wikiModel } : {}),
+      ...(options.canaryFile ? { FINROD_CANARY_FILE: options.canaryFile } : {}),
       FINROD_GATEWAY_TOKEN: GATEWAY_TOKEN,
       FINROD_TRANSCRIBE_COMMAND: "test/stub-transcribe.mjs",
       FINROD_MEMORY_KEY_FILE: join(dataDir, "memory-key"),

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { canaryOf, type Canary } from "./canary.js";
 
 export type Config = {
   readonly port: number;
@@ -20,6 +21,8 @@ export type Config = {
   readonly dreamIdleMs: number;
   /** How often Finrod checks the whole wiki against its sources, merges, and prunes. */
   readonly cleanupMs: number;
+  /** Secrets added to every model's instructions, so their use reports a leaked prompt; none without `FINROD_CANARY_FILE`. */
+  readonly canary?: Canary;
 };
 
 export const PROVIDERS = ["openrouter", "claude-directsdk"] as const;
@@ -66,6 +69,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   if (!Number.isInteger(cleanupSeconds) || cleanupSeconds < 1) {
     throw new Error(`FINROD_WIKI_CLEANUP_SECONDS must be a whole number of seconds, at least 1; got "${env.FINROD_WIKI_CLEANUP_SECONDS}".`);
   }
+  let canary: Canary | undefined;
+  if (env.FINROD_CANARY_FILE) {
+    let text: string;
+    try {
+      text = readFileSync(env.FINROD_CANARY_FILE, "utf8").trim();
+    } catch (error) {
+      throw new Error(`FINROD_CANARY_FILE "${env.FINROD_CANARY_FILE}" is unreadable.`, { cause: error });
+    }
+    canary = canaryOf(text);
+    if (!canary.parts.length) {
+      throw new Error(`FINROD_CANARY_FILE "${env.FINROD_CANARY_FILE}" must hold a canary token of at least 16 characters with a digit, such as a Canarytokens URL or AWS key.`);
+    }
+  }
   const model = env.FINROD_MODEL ?? (provider === "openrouter" ? "deepseek/deepseek-v4.1-flash-1017" : "sonnet");
   return {
     port,
@@ -75,6 +91,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     cleanupMs: cleanupSeconds * 1000,
     memoryPassphrase,
     gatewayToken,
+    ...(canary ? { canary } : {}),
     ...(env.FINROD_TRANSCRIBE_COMMAND ? { transcribeCommand: resolve(env.FINROD_TRANSCRIBE_COMMAND) } : {}),
     dataDir: resolve(env.FINROD_DATA_DIR ?? ".finrod"),
     profile,
