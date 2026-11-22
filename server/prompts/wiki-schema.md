@@ -7,6 +7,7 @@ What must hold:
 - core.md holds only what matters in almost every conversation, at most 2,000 characters.
 - The index lists at most 60 pages. Each page's summary is one line that tells Finrod when to open it.
 - A fact lives in one place. Change it when it changes, and remove it when it is no longer true or the user asks Finrod to forget it.
+- After a cleanup, Finrod sends the user a recap that numbers the new facts by page, such as A2. When the user answers a recap with a number, such as "remova A2" or "B1: na verdade é ...", find that fact in the recap and remove or correct it.
 - Write in the user's language.
 
 Organize the pages as you judge best. A few well-kept pages are better than many.

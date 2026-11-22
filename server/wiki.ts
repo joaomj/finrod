@@ -17,8 +17,6 @@ const SOURCE = /\(source: [^()]+\)$/;
 type PageState = { content: string; summary: string } | undefined;
 /** What one dreaming run did to the wiki: each page it touched, as it was before the run and as the run left it. */
 type ChangeRecord = Record<string, { before: PageState; after: PageState }>;
-/** What the user is shown about one page of a change: the facts added and removed, without their sources. */
-export type PageChange = { path: string; added: string[]; removed: string[] };
 
 /**
  * The user's wiki: Markdown pages in `<profile>/wiki`, and `index.md`, which lists every page but the core page with
@@ -66,15 +64,14 @@ export class Wiki {
     });
   }
 
-  /** The facts each page gained and lost in change `change`. */
-  async changes(change: number): Promise<PageChange[]> {
-    const facts = (page: PageState) => new Set((page?.content ?? "").split("\n").flatMap((line) => (/^\s*- /.test(line) ? [line.replace(/^\s*- /, "").replace(SOURCE, "").trim()] : [])));
-    return Object.entries(await this.record(change)).flatMap(([path, { before, after }]) => {
-      const [was, is] = [facts(before), facts(after)];
-      const added = [...is].filter((fact) => !was.has(fact));
-      const removed = [...was].filter((fact) => !is.has(fact));
-      return added.length || removed.length ? [{ path, added, removed }] : [];
-    });
+  /** Each page's facts without their sources, as the user reads them: the core page first, then the index's pages. */
+  async facts(): Promise<Map<string, string[]>> {
+    const paths = [CORE_PAGE, ...(await this.index()).keys()];
+    const pages = await Promise.all(paths.map(async (path) => {
+      const lines = ((await this.read(path)) ?? "").split("\n");
+      return [path, lines.flatMap((line) => (/^\s*- /.test(line) ? [line.replace(/^\s*- /, "").replace(SOURCE, "").trim()] : []))] as const;
+    }));
+    return new Map(pages.filter(([, facts]) => facts.length));
   }
 
   /**

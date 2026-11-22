@@ -161,59 +161,10 @@ client.on(sdk.RoomMemberEvent.Membership, async (event, member) => {
   log(`Joined ${member.roomId}, invited by ${inviter}.`);
 });
 
-/** The field of a bot message that names the wiki change it reports; it travels encrypted, so the gateway stores nothing. */
-const WIKI_FIELD = "app.finrod.wiki-change";
-
-/** A 👎 on a wiki change undoes it. The report must be the bot's, in the user's room. */
-async function react(user: string, event: InstanceType<typeof sdk.MatrixEvent>) {
-  const relation = event.getContent()["m.relates_to"] as { rel_type?: string; event_id?: string; key?: string } | undefined;
-  if (relation?.rel_type !== "m.annotation" || !relation.event_id || relation.key?.replace(/\uFE0F/g, "") !== "👎") return;
-  const roomId = event.getRoomId()!;
-  const report = new sdk.MatrixEvent(await client.fetchRoomEvent(roomId, relation.event_id));
-  await client.decryptEventIfNeeded(report);
-  const change = report.getContent()[WIKI_FIELD];
-  if (report.getSender() !== session.userId || !Number.isSafeInteger(change)) return;
-  const { restored } = (await core(user, `/api/wiki/changes/${change}/undo`, { method: "POST" })) as { restored: number };
-  await client.sendTextMessage(roomId, restored ? "Desfeito." : "Nada a desfazer: essas notas já mudaram depois.");
-}
-
-/** The reactions already handled, newest last, so that a restart, which reads recent history again, skips them. */
-const reactionsFile = "reactions.json";
-const handled: string[] = [];
-try {
-  handled.push(...(JSON.parse(await readFile(reactionsFile, "utf8")) as string[]));
-} catch (error) {
-  if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error(`Reading ${reactionsFile} failed.`, { cause: error });
-}
-
-/** Handle a user's reaction once. */
-async function onReaction(event: InstanceType<typeof sdk.MatrixEvent>) {
-  const user = event.getSender()!;
-  const roomId = event.getRoomId()!;
-  if (user === session.userId || owner(roomId) !== user) return;
-  const id = event.getId()!;
-  if (handled.includes(id)) return;
-  try {
-    await react(user, event);
-    // A failed reaction stays unrecorded, so the next restart tries it again.
-    handled.push(id);
-    await writeFile(reactionsFile, JSON.stringify(handled.slice(-500)), { mode: 0o600 });
-  } catch (error) {
-    console.error(`Handling the reaction ${id} from ${user} failed:`, error instanceof Error ? error.message : error);
-    await client.sendTextMessage(roomId, "Não consegui registrar sua reação. Tente de novo em instantes.");
-  }
-}
-
-// Clients send reactions unencrypted: the relation is in the clear anyway. The notes stay in the encrypted report.
-client.on(sdk.RoomEvent.Timeline, (event) => {
-  if (event.getType() === "m.reaction") void onReaction(event);
-});
-
 client.on(sdk.MatrixEventEvent.Decrypted, async (event) => {
   const user = event.getSender()!;
   if (user === session.userId) return;
   if (event.isDecryptionFailure()) return log(`Could not decrypt ${event.getId()} from ${user}: ${event.decryptionFailureReason}.`);
-  if (event.getType() === "m.reaction") return onReaction(event);
   if (event.getType() !== "m.room.message") return;
   const roomId = event.getRoomId()!;
   if (owner(roomId) !== user) return;
@@ -261,12 +212,51 @@ async function deliverMessage(user: string, roomId: string, event: InstanceType<
   for (const mark of marks ?? []) await client.redactEvent(roomId, mark.getId()!);
 }
 
-type Answer = { id: number; text: string; error?: string; wiki?: { change: number; pages: { path: string; added: string[]; removed: string[] }[] } };
+type Answer = { id: number; text: string; error?: string };
 
-/** What a wiki update changed, as the user reads it: each page with the facts added and removed. */
-function wikiReport({ pages }: NonNullable<Answer["wiki"]>): string {
-  const lines = pages.flatMap(({ path, added, removed }) => [`${path}:`, ...added.map((fact) => `+ ${fact}`), ...removed.map((fact) => `− ${fact}`)]);
-  return `Atualizei minhas notas:\n${lines.join("\n")}\nReaja com 👎 para desfazer.`;
+// Synapse refuses events over 65,536 bytes, and encryption grows the body and its HTML by about a third.
+const MESSAGE_BYTES = 40_000;
+const fits = (part: string) => Buffer.byteLength(part) + Buffer.byteLength(markdown.render(part)) <= MESSAGE_BYTES;
+
+/** Join `units` with `separator` into as few wrapped parts as fit one message; `split` cuts a unit too large by itself. */
+function pack(units: string[], separator: string, split: (unit: string) => string[], wrap = (part: string) => part): string[] {
+  const result: string[] = [];
+  let part: string | undefined;
+  for (const unit of units) {
+    const joined = part === undefined ? unit : part + separator + unit;
+    if (fits(wrap(joined))) {
+      part = joined;
+      continue;
+    }
+    if (part !== undefined) result.push(wrap(part));
+    part = undefined;
+    if (fits(wrap(unit))) part = unit;
+    else result.push(...split(unit));
+  }
+  if (part !== undefined) result.push(wrap(part));
+  return result;
+}
+
+/** An answer cut into Markdown parts that each fit one Matrix message: between top-level blocks where it can, and a cut code block reopened in each part. */
+function parts(text: string): string[] {
+  const characters = (line: string, wrap?: (part: string) => string) => pack(line.match(/[^]{1,1000}/gu)!, "", (piece) => [piece], wrap);
+  const lines = text.split("\n");
+  const starts = markdown.parse(text, {}).filter((token) => token.level === 0 && token.map).map((token) => token.map![0]);
+  const cuts = [...new Set([0, ...starts])].sort((a, b) => a - b);
+  const blocks = cuts.map((start, index) => lines.slice(start, cuts[index + 1]).join("\n"));
+  return pack(blocks, "\n", (block) => {
+    const fence = /^ {0,3}(`{3,}|~{3,})/.exec(block)?.[1];
+    if (!fence) return pack(block.split("\n"), "\n", (line) => characters(line));
+    const [open, ...rest] = block.split("\n");
+    const close = rest.findLastIndex((line) => line.trim().startsWith(fence));
+    const wrap = (code: string) => `${open}\n${code}\n${fence}`;
+    return pack(close < 0 ? rest : rest.slice(0, close), "\n", (line) => characters(line, wrap), wrap);
+  });
+}
+
+/** Whether Synapse refused an event for good, so that sending it again fails the same way. */
+function refused(error: unknown): error is InstanceType<typeof sdk.MatrixError> {
+  return error instanceof sdk.MatrixError && error.httpStatus !== undefined && error.httpStatus >= 400 && error.httpStatus < 500 && error.httpStatus !== 429;
 }
 
 /** Deliver one user's pending answers to their room, then acknowledge them. */
@@ -277,11 +267,14 @@ async function deliver(user: string) {
   if (owner(roomId) !== user) return log(`Holding ${user}'s answers: ${roomId} is no longer their direct room with the bot.`);
   const { answers } = (await core(user, "/api/gateway/answers")) as unknown as { answers: Answer[] };
   for (const answer of answers) {
-    if (answer.wiki) {
-      await client.sendMessage(roomId, { msgtype: "m.notice", body: wikiReport(answer.wiki), [WIKI_FIELD]: answer.wiki.change } as never);
-    } else {
+    try {
       const text = answer.text || `(${answer.error ?? "Sem resposta."})`;
-      await client.sendHtmlMessage(roomId, text, markdown.render(text));
+      for (const part of parts(text)) await client.sendHtmlMessage(roomId, part, markdown.render(part));
+    } catch (error) {
+      // An answer Synapse refuses would hold every later answer back, so the user gets a notice in its place.
+      if (!refused(error)) throw error;
+      console.error(`Synapse refused answer ${answer.id} for ${user}:`, error.message);
+      await client.sendNotice(roomId, `(Não consegui entregar esta resposta: ${error.errcode ?? error.httpStatus}.)`);
     }
     await core(user, "/api/gateway/answers/ack", { method: "POST", body: JSON.stringify({ id: answer.id }) });
   }

@@ -277,8 +277,8 @@ runs npm or builds anything.
 `data/profiles/default/chatgpt/` holds the user's ChatGPT conversations
 (`chatgpt.sqlite`) and their recordings (`audio/`), imported once from
 ChatGPT's data export. Finrod finds the folder at start. Search then covers
-the import, and wiki updates read what the user wrote there. Each update
-shows in Element and a 👎 undoes it, like any other.
+the import, and wiki updates read what the user wrote there. The next weekly
+recap lists what they learned.
 
 The import takes conversations and recordings only. ChatGPT's saved memories
 are not imported, and neither are images.
@@ -326,7 +326,7 @@ complete rollback. To undo only the import and keep everything since:
    done
    ```
 
-   A page changed again after an update keeps the newer version, as with 👎.
+   A page changed again after an update keeps the newer version.
 2. Stop Finrod, delete the folder, and start Finrod. At start, search drops
    the import's messages, and updates stop reading it.
 

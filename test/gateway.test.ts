@@ -141,7 +141,7 @@ async function heard(core: { base: string }) {
 before(async () => {
   synapse = await startSynapse();
   bobDir = await newDataDir();
-  cores = { alice: await startServer(await newDataDir(), { hang: false, wikiIdleSeconds: 1 }), bob: await startServer(bobDir, { hang: false, wikiIdleSeconds: 1 }) };
+  cores = { alice: await startServer(await newDataDir(), { hang: false }), bob: await startServer(bobDir, { hang: false }) };
   bot = (await register(synapse.url, "finrod")).user_id;
   const dir = await mkdtemp(join(tmpdir(), "finrod-gateway-"));
   await writeFile(join(dir, "password"), PASSWORD);
@@ -191,24 +191,12 @@ test("a voice note is decrypted, transcribed by the user's core, and answered", 
   await alice.reply(rooms.alice, /^Stub answer to: spoken words$/);
 });
 
-test("a 👎 on a wiki change undoes it, once, even after a restart that missed a message", { timeout: 120_000 }, async () => {
-  await alice.client.sendTextMessage(rooms.alice, "remember: likes green tea");
-  const report = await alice.reply(rooms.alice, /^Atualizei minhas notas:\ncore\.md:\n\+ likes green tea\nReaja com 👎 para desfazer\.$/);
-  await alice.client.sendTextMessage(rooms.alice, "what do you know?");
-  await alice.reply(rooms.alice, /^Stub answer to: what do you know\? \(knows: likes green tea\)$/);
-  await alice.client.sendEvent(rooms.alice, "m.reaction" as never, { "m.relates_to": { rel_type: "m.annotation", event_id: report.getId(), key: "👎" } } as never);
-  await alice.reply(rooms.alice, /^Desfeito\.$/);
-  await alice.client.sendTextMessage(rooms.alice, "and now?");
-  await alice.reply(rooms.alice, /^Stub answer to: and now\?$/);
-
+test("a message sent while the gateway was down is answered after its restart, once", { timeout: 120_000 }, async () => {
   await gateway.stop();
   await alice.client.sendTextMessage(rooms.alice, "sent while you were down");
   gateway = await startGateway();
   await alice.reply(rooms.alice, /^Stub answer to: sent while you were down/);
-  // Bob's answer after the restart shows the gateway has read past the old reaction.
-  await bob.client.sendTextMessage(rooms.bob, "after the restart");
-  await bob.reply(rooms.bob, /^Stub answer to: after the restart$/);
-  assert.equal(alice.texts(rooms.alice).filter((text) => /^(Desfeito|Nada a desfazer)/.test(text)).length, 1, "the reaction is handled once");
+  assert.equal(alice.texts(rooms.alice).filter((text) => text.startsWith("Stub answer to: sent while you were down")).length, 1, "the answer comes once");
 });
 
 test("a message sent while the core is down waits under a clock and is answered once the core is back", { timeout: 120_000 }, async () => {
@@ -218,7 +206,7 @@ test("a message sent while the core is down waits under a clock and is answered 
   const clock = () =>
     bob.client.getRoom(rooms.bob)?.getLiveTimeline().getEvents().find((event) => event.getType() === "m.reaction" && event.getRelation()?.event_id === sent.event_id && event.getRelation()?.key === "⏳");
   const mark = await until("the clock on the waiting message", () => clock(), 30_000);
-  cores.bob = await startServer(bobDir, { hang: false, wikiIdleSeconds: 1, port });
+  cores.bob = await startServer(bobDir, { hang: false, port });
   await bob.reply(rooms.bob, /^Stub answer to: are you down\?$/);
   await until("the clock to go", () => mark.isRedacted(), 30_000);
   assert.ok(!bob.texts(rooms.bob).some((text) => text.startsWith("Não consegui")), "no error message while the core is down");
@@ -234,3 +222,17 @@ test("once a third person joins a user's room, the gateway stops forwarding from
   await bob.reply(rooms.bob, /^Stub answer to: still there\?$/);
   assert.ok(!(await heard(cores.alice)).includes("said in front of mallory"));
 });
+
+test("an answer too large for one Matrix message arrives whole, in parts that each render", { timeout: 60_000 }, async () => {
+  const code = Array.from({ length: 500 }, (_, line) => `const line${line} = "${"x".repeat(40)}";`).join("\n");
+  const question = `Intro paragraph.\n\n\`\`\`ts\n${code}\n\`\`\`\n\nClosing paragraph.`;
+  const before = bob.texts(rooms.bob).length;
+  await bob.client.sendTextMessage(rooms.bob, question);
+  await bob.reply(rooms.bob, /Closing paragraph\.$/);
+  const answer = bob.texts(rooms.bob).slice(before);
+  assert.ok(answer.length > 1, "the answer is split");
+  for (const part of answer.filter((part) => part.includes("const line"))) assert.equal(part.match(/^```/gm)?.length, 2, "each part opens and closes its code");
+  const withoutFences = (text: string) => text.split("\n").filter((line) => line && !line.startsWith("```")).join("\n");
+  assert.equal(withoutFences(answer.join("\n")), withoutFences(`Stub answer to: ${question}`), "nothing is lost or repeated");
+});
+

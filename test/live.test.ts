@@ -13,10 +13,10 @@ const ANSWER_MS = 180_000;
 
 /** Send `text` and return Finrod's answer to it. */
 async function ask(base: string, id: number, text: string, requestId: string): Promise<Message> {
-  const before = (await follow(base, id, () => true)).at(-1)!.messages.filter((m) => !m.wiki).length;
+  const before = (await follow(base, id, () => true)).at(-1)!.messages.length;
   await post(base, `/api/conversations/${id}/messages`, { text, requestId });
-  const states = await follow(base, id, (state) => !state.live.busy && state.messages.filter((m) => !m.wiki).length >= before + 2, ANSWER_MS);
-  const answer = states.at(-1)!.messages.filter((m) => !m.wiki).at(-1)!;
+  const states = await follow(base, id, (state) => !state.live.busy && state.messages.length >= before + 2, ANSWER_MS);
+  const answer = states.at(-1)!.messages.at(-1)!;
   assert.equal(answer.error, undefined, `the model answered without an error: ${answer.error}`);
   return answer;
 }
@@ -38,15 +38,15 @@ test("Sonnet finds a fact that only a wiki page holds, from the index in its pro
   }
 });
 
-test("Opus turns a conversation into small, sourced pages after it goes quiet", live, async () => {
+test("Opus turns a conversation into small, sourced pages after it goes quiet, and a reply to the weekly recap corrects them", { ...live, timeout: 1_200_000 }, async () => {
   const dir = await newDataDir();
   const wiki = join(dir, "profiles", "default", "wiki");
-  const server = await startServer(dir, { hang: false, live: true, wikiIdleSeconds: 1 });
+  const server = await startServer(dir, { hang: false, live: true, wikiIdleSeconds: 1, wikiCleanupSeconds: 5 });
   try {
     const id = ((await (await call(`${server.base}/api/stream`)).json()) as { id: number }).id;
     await ask(server.base, id, "Oi! Minha irmã Beatriz se mudou para Tromsø, na Noruega, em março.", "live-0101");
     await ask(server.base, id, "Aliás, sou vegetariano há cinco anos. Lembre disso quando sugerir receitas.", "live-0102");
-    const changes = await wikiChanges(server.base, (found) => found.length > 0, 480_000);
+    await wikiChanges(dir, (found) => found.length > 0, 480_000);
 
     const files = (await readdir(wiki, { recursive: true })).filter((name) => name.endsWith(".md"));
     const pages = Object.fromEntries(await Promise.all(files.map(async (name) => [name, await readFile(join(wiki, name), "utf8")] as const)));
@@ -59,8 +59,16 @@ test("Opus turns a conversation into small, sourced pages after it goes quiet", 
       for (const [, cited] of source[1]!.matchAll(/#(\d+)/g)) assert.ok(ids.includes(Number(cited)), `#${cited} is a message of the conversation`);
     }
     assert.ok((pages["core.md"] ?? "").length <= 2_000, "the core page stays small");
-    assert.ok(changes.flatMap((change) => change.pages).length > 0, "the user is told what changed");
     console.log(`Live wiki after one update:\n${Object.entries(pages).map(([name, text]) => `--- ${name}\n${text}`).join("\n")}`);
+
+    // The cleanup is due 5 seconds after the first update; its recap numbers the facts.
+    const recap = (await follow(server.base, id, (state) => state.messages.some((m) => m.text.startsWith("Resumo da semana")), 480_000)).at(-1)!.messages.find((m) => m.text.startsWith("Resumo da semana"))!.text;
+    console.log(`Live recap:\n${recap}`);
+    const number = /^- ([A-Z]+\d+)\. .*vegetarian/im.exec(recap)?.[1];
+    assert.ok(number, "the recap numbers the diet fact");
+    const confirmed = await ask(server.base, id, `remova ${number}`, "live-0103");
+    console.log(`Live answer to the correction: ${confirmed.text}`);
+    await wikiChanges(dir, async () => !/vegetarian/i.test((await Promise.all((await readdir(wiki, { recursive: true })).filter((name) => name.endsWith(".md")).map((name) => readFile(join(wiki, name), "utf8")))).join("\n")), 480_000);
   } finally {
     await server.kill();
   }

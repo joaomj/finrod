@@ -70,7 +70,7 @@ export class Search {
 
   /** The messages around message `id`, as they were said. */
   async around(id: number, count: number): Promise<string> {
-    const all = (await this.messages()).filter((message) => !message.wiki);
+    const all = await this.messages();
     const at = all.findIndex((message) => message.id >= id);
     if (at < 0) return `There is no message #${id}.`;
     return all.slice(Math.max(0, at - count), at + count + 1).map((message) => messageLine(message)).join("\n");
@@ -82,7 +82,7 @@ export class Search {
     const insertPage = this.db.prepare("INSERT INTO pages (text, path) VALUES (?, ?)");
     const pages = [CORE_PAGE, ...(await this.wiki.index()).keys()];
     const texts = await Promise.all(pages.map(async (path) => [path, await this.wiki.read(path)] as const));
-    const fresh = all.filter((message) => message.id > newest && message.text && !message.wiki);
+    const fresh = all.filter((message) => message.id > newest && message.text);
     this.db.exec("BEGIN");
     try {
       for (const message of fresh) insert.run(message.text, message.id, message.at, message.role);

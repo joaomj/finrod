@@ -4,6 +4,14 @@ This file records user-facing changes.
 
 ## [Unreleased]
 
+### Changed
+
+- Finrod no longer reports each wiki update. Once a week, after the wiki cleanup, it sends a numbered list of the facts it learned since the last list, such as A1 and A2 for the first page. Reply with a number to correct a fact, such as "remova A2" or "B1: na verdade é ...". The first list holds every fact in the wiki. A 👎 no longer undoes an update.
+
+### Fixed
+
+- Answers reach Element again after a message too large for Matrix. Since 2026-11-20, a large wiki report was refused by the Matrix server and held back every later answer. Finrod now splits a long answer into several messages, and if the Matrix server still refuses a message, Finrod sends a short notice in its place and goes on.
+
 ## [0.11.0] - 2026-11-21
 
 ### Added

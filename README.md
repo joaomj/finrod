@@ -17,8 +17,9 @@ the assistant belongs to a vendor.
 - Web research through Exa's free tier.
 - Remembers by searching everything you said before, and keeps a wiki of
   notes about you: after the chat has been quiet for half an hour, Finrod
-  updates its notes about you, each fact with the message it came from. It
-  tells you what changed, and a 👎 undoes it.
+  updates its notes about you, each fact with the message it came from. Once a
+  week it sends a numbered list of what it learned, and you correct a fact by
+  its number, such as "remova A2".
 - Searches and learns from your imported ChatGPT history.
 - Shows typing while it answers, and answers with Markdown.
 - Answers messages sent while it was restarting, once each.

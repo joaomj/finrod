@@ -99,7 +99,6 @@ page but the core page with a one-line summary.
   when the chat is quiet, one update reads no new messages. Its input starts
   with `server/prompts/wiki-cleanup.md`: read every page, check facts against
   the messages they cite, merge repeats, and remove what is no longer true.
-  The user sees and can undo its change like any other.
 - **Small by construction.** What goes into every message stays bounded:
   `write_page` refuses a core page over 2,000 characters, and a new page once
   the index lists 60. The schema says what the notes are for and what must
@@ -107,15 +106,17 @@ page but the core page with a one-line summary.
 - **Sources.** `write_page` refuses a page in which a line is not a heading
   or a fact as a list item that ends in `(source: ...)`, such as
   `(source: #123)` for entry 123 of the conversation.
-- **Review.** Each update records every page it touched, before and after,
-  in `wiki-changes/<id>.json`. If it changed a fact, Finrod adds a
-  `finrod.wiki-change` entry to the stream, which the model never sees, with
-  the facts added and removed. The gateway posts it as a notice that carries
-  the change's ID in its encrypted content. A 👎 reaction undoes it
-  (`POST /api/wiki/changes/<id>/undo`): each page that is still as the update
-  left it goes back, and a page changed since keeps the newer version. Clients
-  send reactions unencrypted, but a reaction holds only the emoji and the
-  notice's event ID.
+- **Recap.** Updates run silently. After each cleanup, Finrod adds a
+  `finrod.recap` entry to the stream: the facts the wiki holds that the last
+  recap did not, numbered by page (A1, A2, B1). `recap.json` keeps the facts
+  the last recap covered. The entry is an answer that the gateway delivers
+  and that the chat model sees, so when the user replies "remova A2", the
+  chat confirms and the next update reads the recap and the reply together
+  and changes the page.
+- **Undo.** Each update records every page it touched, before and after, in
+  `wiki-changes/<id>.json`. `POST /api/wiki/changes/<id>/undo` puts back each
+  page that is still as the update left it; a page changed since keeps the
+  newer version.
 - **Old memories.** Versions before the wiki kept approved memories in
   `memories.enc`, encrypted with a scrypt key of the passphrase in
   `FINROD_MEMORY_KEY_FILE`. The first update takes them in as a source, cited

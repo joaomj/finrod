@@ -21,12 +21,12 @@ import { withCanary, type Canary } from "./canary.js";
 import type { Config } from "./config.js";
 import { ChatGPT } from "./chatgpt.js";
 import { clock } from "./clock.js";
-import { Dreaming, WIKI_CHANGE_KIND } from "./dream.js";
+import { Dreaming, RECAP_KIND } from "./dream.js";
 import { legacyMemories } from "./memories.js";
 import { research } from "./research.js";
 import { Search, searching } from "./search.js";
 import { Voice } from "./voice.js";
-import { Wiki, wikiTools, type PageChange } from "./wiki.js";
+import { Wiki, wikiTools } from "./wiki.js";
 import finrodPrompt from "./prompts/finrod.md";
 import wikiPrompt from "./prompts/wiki.md";
 
@@ -78,8 +78,6 @@ export type ChatMessage = {
   sources?: Source[];
   /** Seconds of speech a spoken message was transcribed from. */
   voice?: number;
-  /** What a wiki update changed; the entry has no text. */
-  wiki?: { change: number; pages: PageChange[] };
 };
 /** Kind of an input that carries more than its text, such as the length of the voice note it came from. */
 const MESSAGE_KIND = "finrod.message";
@@ -318,9 +316,9 @@ export function messagesOf(view: ConversationView): ChatMessage[] {
     if (entry.kind === "pi.tool-result" && message?.role === "toolResult" && RESEARCH_TOOLS.has(message.toolName) && !message.isError) {
       const text = message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n");
       found.push(...sourcesFrom(text));
-    } else if (entry.kind === WIKI_CHANGE_KIND) {
-      const { at, ...wiki } = entry.data as NonNullable<ChatMessage["wiki"]> & { at: number };
-      messages.push({ id: entry.id, role: "assistant", at, text: "", wiki });
+    } else if (entry.kind === RECAP_KIND) {
+      const { text, at } = entry.data as { text: string; at: number };
+      messages.push({ id: entry.id, role: "assistant", at, text });
     } else if (entry.kind === MESSAGE_KIND) {
       const data = entry.data as MessageData;
       found = [];

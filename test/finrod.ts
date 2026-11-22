@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { after } from "node:test";
 
 export type WikiChange = { change: number; pages: { path: string; added: string[]; removed: string[] }[] };
-export type Message = { id: number; role: "user" | "assistant"; text: string; error?: string; wiki?: WikiChange };
+export type Message = { id: number; role: "user" | "assistant"; text: string; error?: string };
 export type Live = { busy: boolean; partial?: string };
 export type State = { messages: Message[]; live: Live };
 
@@ -83,12 +83,25 @@ export async function startServer(dataDir: string, options: { hang: boolean; liv
   return { base: `http://127.0.0.1:${port}`, output: () => output, kill: () => new Promise((resolve) => (child.exitCode !== null || child.signalCode !== null ? resolve(undefined) : (child.once("exit", resolve), child.kill("SIGKILL")))) };
 }
 
-/** The wiki changes waiting for the gateway, once `done` accepts them. */
-export async function wikiChanges(base: string, done: (changes: WikiChange[]) => boolean | Promise<boolean>, ms = 15_000): Promise<WikiChange[]> {
+/** The facts of a page, without their sources. */
+const facts = (page?: { content: string }) => new Set((page?.content ?? "").split("\n").flatMap((line) => (line.startsWith("- ") ? [line.slice(2).replace(/ \(source: [^()]+\)$/, "")] : [])));
+
+/** The changes the wiki recorded in `dataDir`'s default profile, oldest first, each page with the facts it gained and lost, once `done` accepts them. */
+export async function wikiChanges(dataDir: string, done: (changes: WikiChange[]) => boolean | Promise<boolean>, ms = 15_000): Promise<WikiChange[]> {
+  const dir = join(dataDir, "profiles", "default", "wiki-changes");
   for (const end = Date.now() + ms; Date.now() < end; await new Promise((resolve) => setTimeout(resolve, 200))) {
-    const { answers } = (await (await call(`${base}/api/gateway/answers`)).json()) as { answers: Message[] };
-    const changes = answers.flatMap((answer) => (answer.wiki ? [answer.wiki] : []));
-    if (await done(changes)) return changes;
+    const files = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".json")).sort((a, b) => parseInt(a) - parseInt(b));
+    const changes = await Promise.all(files.map(async (name) => {
+      const record = JSON.parse(await readFile(join(dir, name), "utf8")) as Record<string, { before?: { content: string }; after?: { content: string } }>;
+      const pages = Object.entries(record).flatMap(([path, { before, after }]) => {
+        const [was, is] = [facts(before), facts(after)];
+        const page = { path, added: [...is].filter((fact) => !was.has(fact)), removed: [...was].filter((fact) => !is.has(fact)) };
+        return page.added.length || page.removed.length ? [page] : [];
+      });
+      return { change: parseInt(name), pages };
+    }));
+    const changed = changes.filter((change) => change.pages.length);
+    if (await done(changed)) return changed;
   }
   throw new Error("Timed out waiting for the wiki to change.");
 }

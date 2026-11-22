@@ -128,17 +128,17 @@ test("once the chat is quiet, the wiki model keeps what the user said with its s
     const id = ((await (await call(`${server.base}/api/stream`)).json()) as { id: number }).id;
     let n = 100;
     const ask = async (text: string) => {
-      const before = (await follow(server.base, id, () => true)).at(-1)!.messages.filter((m) => !m.wiki).length;
+      const before = (await follow(server.base, id, () => true)).at(-1)!.messages.length;
       await post(server.base, `/api/conversations/${id}/messages`, { text, requestId: `request-0${++n}` });
-      const after = await follow(server.base, id, (state) => !state.live.busy && state.messages.filter((m) => !m.wiki).length >= before + 2);
-      return after.at(-1)!.messages.filter((m) => !m.wiki).slice(before);
+      const after = await follow(server.base, id, (state) => !state.live.busy && state.messages.length >= before + 2);
+      return after.at(-1)!.messages.slice(before);
     };
     const [said] = await ask("remember: likes green tea");
     await ask("note people/ana.md: Ana is my sister");
     await ask("unsourced topics/secret.md: a fact with no source");
 
     const pages = (changes: WikiChange[]) => changes.flatMap((change) => change.pages);
-    const changes = await wikiChanges(server.base, (found) => pages(found).length >= 2);
+    const changes = await wikiChanges(dir, (found) => pages(found).length >= 2);
     assert.deepEqual(pages(changes).sort((a, b) => a.path.localeCompare(b.path)), [
       { path: "core.md", added: ["likes green tea"], removed: [] },
       { path: "people/ana.md", added: ["Ana is my sister"], removed: [] },
@@ -178,7 +178,7 @@ test("the index stops at 60 pages: an update can change a listed page but must m
     await follow(server.base, id, (state) => !state.live.busy && state.messages.length >= 2);
     await post(server.base, `/api/conversations/${id}/messages`, { text: "note topics/t0.md: still fits", requestId: "request-0302" });
     // The refused page was asked for first, so by the time t0 changes, it has been tried.
-    const changes = await wikiChanges(server.base, (found) => found.length > 0);
+    const changes = await wikiChanges(dir, (found) => found.length > 0);
     assert.deepEqual(changes.flatMap((change) => change.pages), [{ path: "topics/t0.md", added: ["still fits"], removed: [] }]);
     await assert.rejects(readFile(join(wiki, "topics", "new.md")), "the 61st page is refused");
   } finally {
@@ -186,20 +186,29 @@ test("the index stops at 60 pages: an update can change a listed page but must m
   }
 });
 
-test("a cleanup runs on its own once due, with no new messages, and prunes what is no longer true", async () => {
-  const server = await startServer(await newDataDir(), { hang: false, wikiIdleSeconds: 1, wikiCleanupSeconds: 3 });
+test("a cleanup runs on its own once due, with no new messages, prunes what is no longer true, and recaps only the facts learned since the last recap", async () => {
+  const dir = await newDataDir();
+  const server = await startServer(dir, { hang: false, wikiIdleSeconds: 1, wikiCleanupSeconds: 3 });
   try {
     const id = ((await (await call(`${server.base}/api/stream`)).json()) as { id: number }).id;
     await post(server.base, `/api/conversations/${id}/messages`, { text: "remember: likes tea", requestId: "request-0401" });
     await follow(server.base, id, (state) => !state.live.busy && state.messages.length >= 2);
     await post(server.base, `/api/conversations/${id}/messages`, { text: "remember: stale: works at the bakery", requestId: "request-0402" });
-    const changes = await wikiChanges(server.base, (found) => found.some((change) => change.pages.some((page) => page.removed.length)));
+    const changes = await wikiChanges(dir, (found) => found.some((change) => change.pages.some((page) => page.removed.length)));
     assert.deepEqual(changes.at(-1)!.pages, [{ path: "core.md", added: [], removed: ["stale: works at the bakery"] }]);
     assert.deepEqual(
       changes.flatMap((change) => change.pages.flatMap((page) => page.added)),
       ["likes tea", "stale: works at the bakery"],
       "the updates before it took in the messages",
     );
+    const recaps = async (count: number) => (await follow(server.base, id, (state) => state.messages.filter((m) => m.text.startsWith("Resumo da semana")).length >= count)).at(-1)!.messages.filter((m) => m.text.startsWith("Resumo da semana")).map((m) => m.text);
+    const [first] = await recaps(1);
+    assert.match(first!, /\*\*A\. core\.md\*\*\n- A1\. likes tea\n\nPara corrigir/, "the recap numbers each fact the cleanup kept");
+    assert.doesNotMatch(first!, /bakery/, "and leaves out what it removed");
+
+    await post(server.base, `/api/conversations/${id}/messages`, { text: "remember: likes coffee", requestId: "request-0403" });
+    const [, second] = await recaps(2);
+    assert.match(second!, /\*\*A\. core\.md\*\*\n- A1\. likes coffee\n\nPara corrigir/, "the next recap holds only what is new since the last");
   } finally {
     await server.kill();
   }
@@ -258,10 +267,10 @@ test("the memories approved before the wiki move into it once, and only their pa
   await writeFile(join(dir, "memory-key"), "correct horse battery staple");
   const server = await startServer(dir, { hang: false });
   try {
-    const [change] = await wikiChanges(server.base, (found) => found.length > 0);
+    const [change] = await wikiChanges(dir, (found) => found.length > 0);
     assert.deepEqual(change!.pages, [{ path: "core.md", added: ["likes coffee"], removed: [] }]);
     assert.equal(await readFile(join(profile, "wiki", "core.md"), "utf8"), "- likes coffee (source: memory m-0000000a)\n");
-    await wikiChanges(server.base, async () => (await readdir(profile)).includes("memories.enc.imported"));
+    await wikiChanges(dir, async () => (await readdir(profile)).includes("memories.enc.imported"));
   } finally {
     await server.kill();
   }
@@ -293,13 +302,13 @@ test("a ChatGPT import is searched and taken into the wiki, and undoing its chan
   const id = ((await (await call(`${server.base}/api/stream`)).json()) as { id: number }).id;
   let n = 600;
   const ask = async (text: string) => {
-    const before = (await follow(server.base, id, () => true)).at(-1)!.messages.filter((m) => !m.wiki).length;
+    const before = (await follow(server.base, id, () => true)).at(-1)!.messages.length;
     await post(server.base, `/api/conversations/${id}/messages`, { text, requestId: `request-0${++n}` });
-    const after = await follow(server.base, id, (state) => !state.live.busy && state.messages.filter((m) => !m.wiki).length >= before + 2);
-    return after.at(-1)!.messages.filter((m) => !m.wiki).at(-1)!.text;
+    const after = await follow(server.base, id, (state) => !state.live.busy && state.messages.length >= before + 2);
+    return after.at(-1)!.messages.at(-1)!.text;
   };
   try {
-    const [change] = await wikiChanges(server.base, (found) => found.length > 0);
+    const [change] = await wikiChanges(dir, (found) => found.length > 0);
     assert.deepEqual(change!.pages, [{ path: "core.md", added: ["plays chess on Sundays"], removed: [] }]);
     assert.equal(await readFile(join(profile, "wiki", "core.md"), "utf8"), "- plays chess on Sundays (source: chatgpt #c1)\n", "each fact names the imported message it came from");
 
@@ -336,10 +345,10 @@ test("with a canary, the chat and the wiki updates carry it to the model, and re
     const id = ((await (await call(`${server.base}/api/stream`)).json()) as { id: number }).id;
     await post(server.base, `/api/conversations/${id}/messages`, { text: "remember: likes tea", requestId: "request-0701" });
     assert.equal((await follow(server.base, id, answered)).at(-1)!.messages.at(-1)!.text, "Stub answer to: remember: likes tea");
-    assert.deepEqual((await wikiChanges(server.base, (found) => found.length > 0))[0]!.pages, [{ path: "core.md", added: ["likes tea"], removed: [] }]);
+    assert.deepEqual((await wikiChanges(dir, (found) => found.length > 0))[0]!.pages, [{ path: "core.md", added: ["likes tea"], removed: [] }]);
 
     await post(server.base, `/api/conversations/${id}/messages`, { text: `fetch: ${url}`, requestId: "request-0702" });
-    const fetched = (await follow(server.base, id, (state) => !state.live.busy && state.messages.filter((m) => !m.wiki).length === 4)).at(-1)!;
+    const fetched = (await follow(server.base, id, (state) => !state.live.busy && state.messages.length === 4)).at(-1)!;
     assert.match(fetched.messages.at(-1)!.text, /^Read: .*refused: the request contains the canary/s);
   } finally {
     await server.kill();
