@@ -4,6 +4,8 @@ This file records user-facing changes.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-22
+
 ### Changed
 
 - Finrod no longer reports each wiki update. Once a week, after the wiki cleanup, it sends a numbered list of the facts it learned since the last list, such as A1 and A2 for the first page. Reply with a number to correct a fact, such as "remova A2" or "B1: na verdade é ...". The first list holds every fact in the wiki. A 👎 no longer undoes an update.
